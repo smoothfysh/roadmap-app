@@ -996,7 +996,7 @@ export default function RoadmapTracker() {
         )}
 
         {/* Footer help */}
-        <div className="max-w-[1800px] mx-auto mt-6 text-xs text-stone-500 font-mono flex flex-wrap gap-x-6 gap-y-1">
+        <div className="max-w-[1800px] mx-auto mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
           {isPreview ? (
             <span>This is a read-only shared view — use <span className="font-bold">Save &amp; open</span> in the banner above to make your own editable copy</span>
           ) : (
@@ -1007,6 +1007,7 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Hover</span> an item to reveal delete</span>
             </>
           )}
+          <span className="ml-auto opacity-40">v1.0.0</span>
         </div>
       </div>
     </div>
