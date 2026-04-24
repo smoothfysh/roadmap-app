@@ -15,7 +15,7 @@ const SCOPE_NAME = (() => {
 
 // ---------- Seed data ----------
 const seedData = {
-  title: "DEMAND: Growth Streams Roadmap",
+  title: "My Roadmap",
   columns: [
     { id: "done", title: "DONE", subtitle: "Released stuff... already LIVE!", color: "green" },
     { id: "coming", title: "COMING SOON", subtitle: "Q2 2026", color: "blue" },
@@ -23,9 +23,9 @@ const seedData = {
     { id: "future", title: "FUTURE", subtitle: "Beyond the next 6 months", color: "slate" },
   ],
   teams: [
-    { id: "firefly", name: "AUTHENTICATION (Team FIREFLY)" },
-    { id: "waterfly", name: "USER MANAGEMENT ++ (Team WATERFLY)" },
-    { id: "monet", name: "GROWTH STREAMS (Team MONET)" },
+    { id: "team_a", name: "TEAM A" },
+    { id: "team_b", name: "TEAM B" },
+    { id: "team_c", name: "TEAM C" },
   ],
   items: [],
 };
@@ -475,20 +475,9 @@ export default function RoadmapTracker() {
     event.target.value = "";
   };
 
-  const resetToSeed = async () => {
-    if (!confirm("Reset the roadmap from roadmap.csv? Your current changes will be lost.")) return;
-    try {
-      const res = await fetch("/roadmap.csv");
-      if (res.ok) {
-        const text = await res.text();
-        const items = csvToItems(text);
-        saveData({ ...seedData, items });
-      } else {
-        alert("Could not load roadmap.csv");
-      }
-    } catch (e) {
-      alert("Error loading roadmap.csv: " + e.message);
-    }
+  const resetToSeed = () => {
+    if (!confirm("Reset to a blank roadmap? All current items will be removed and team names reset to generic ones.")) return;
+    saveData(seedData);
   };
 
   // ---------- Derived display state ----------
@@ -629,7 +618,7 @@ export default function RoadmapTracker() {
                   <button
                     onClick={resetToSeed}
                     className="text-xs font-mono tracking-wider text-stone-500 hover:text-stone-800 uppercase"
-                    title="Reload from roadmap.csv in /public"
+                    title="Clear all items and reset to a blank roadmap"
                   >
                     Reset
                   </button>
