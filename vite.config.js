@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/my-roadmap-site/', // MUST match your repo name exactly
+  base: '/', // MUST match your repo name exactly
 })
