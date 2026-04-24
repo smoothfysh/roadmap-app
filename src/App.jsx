@@ -174,15 +174,32 @@ const flagStyles = {
   null: "",
 };
 
-const tagColors = {
+// ---------- Tag colour tokens — edit these to adjust country badge colours ----------
+const TAG_STYLES = {
+  "FR":    "bg-red-600 text-white",
+  "DE":    "bg-yellow-400 text-black",
+  "AT":    "bg-blue-600 text-white",
   "FR/DE": "bg-slate-800 text-white",
-  "DE": "bg-yellow-400 text-black",
-  "FR": "bg-red-600 text-white",
-  "AT": "bg-blue-600 text-white",
+  "DE/FR": "bg-slate-800 text-white",
 };
+const TAG_COMBO_STYLE   = "bg-slate-700 text-white";                         // any unlisted multi-country combo (e.g. FR/AT)
+const TAG_UNKNOWN_STYLE = "bg-white border border-stone-400 text-stone-700"; // single unrecognised country — styled like a date pill
+// ------------------------------------------------------------------------------------
 
-function getTagColor(tag) {
-  return tagColors[tag] || "bg-slate-600 text-white";
+function getTagStyle(tag) {
+  if (!tag) return null;
+  if (TAG_STYLES[tag]) return TAG_STYLES[tag];
+  if (tag.includes("/")) return TAG_COMBO_STYLE;
+  return TAG_UNKNOWN_STYLE;
+}
+
+// ---------- Tag extraction from item title ----------
+// Recognises prefixes like "FR: title", "DE: title", "FR/DE: title"
+// Country codes must be 2–3 uppercase letters; combinations separated by /
+function extractTag(text) {
+  const match = text.match(/^([A-Z]{2,3}(?:\/[A-Z]{2,3})*)\s*:\s*(.+)$/);
+  if (match) return { tag: match[1], text: match[2].trim() };
+  return { tag: null, text };
 }
 
 export default function RoadmapTracker() {
@@ -192,7 +209,6 @@ export default function RoadmapTracker() {
   const [dragOverId, setDragOverId] = useState(null);
   const [dragOverSection, setDragOverSection] = useState(null);
   const [addingTo, setAddingTo] = useState(null); // { columnId, teamId }
-  const [newItemTag, setNewItemTag] = useState("FR/DE");
   const [newItemText, setNewItemText] = useState("");
   const [expandedItem, setExpandedItem] = useState(null);
   const [editingSubtitle, setEditingSubtitle] = useState(null);
@@ -223,11 +239,23 @@ export default function RoadmapTracker() {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          // Migrate future column from rose → slate
+          // Migrate: future column rose → slate
           parsed.columns = parsed.columns.map((c) =>
             c.id === "future" && c.color === "rose" ? { ...c, color: "slate" } : c
           );
           if (!parsed.title) parsed.title = seedData.title;
+          // Migrate: add any teams that items reference but are missing from the teams list.
+          // This repairs a mismatch that occurs when items were loaded from a CSV whose
+          // teamIds (e.g. "firefly") no longer exist in the stored teams array.
+          const knownTeamIds = new Set(parsed.teams.map((t) => t.id));
+          const orphanIds = [...new Set(
+            parsed.items.filter((i) => i.teamId && !knownTeamIds.has(i.teamId)).map((i) => i.teamId)
+          )];
+          if (orphanIds.length > 0) {
+            orphanIds.forEach((id) =>
+              parsed.teams.push({ id, name: id.toUpperCase().replace(/[-_]/g, " ") })
+            );
+          }
           setData(parsed);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
           setLoading(false);
@@ -237,13 +265,18 @@ export default function RoadmapTracker() {
         // fall through to CSV load
       }
 
-      // No localStorage — load from roadmap.csv in public folder
+      // No localStorage — load from roadmap.csv in public folder.
+      // Derive teams from the teamIds in the CSV so items always match their teams.
       try {
         const res = await fetch("/roadmap.csv");
         if (res.ok) {
           const text = await res.text();
           const items = csvToItems(text);
-          const initial = { ...seedData, items };
+          const uniqueTeamIds = [...new Set(items.map((i) => i.teamId).filter(Boolean))];
+          const teams = uniqueTeamIds.length > 0
+            ? uniqueTeamIds.map((id) => ({ id, name: id.toUpperCase().replace(/[-_]/g, " ") }))
+            : seedData.teams;
+          const initial = { ...seedData, teams, items };
           setData(initial);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
         }
@@ -374,9 +407,10 @@ export default function RoadmapTracker() {
   // ---------- Item CRUD ----------
   const addItem = (columnId, teamId) => {
     if (!newItemText.trim()) return;
+    const { tag, text } = extractTag(newItemText.trim());
     const newItem = {
       id: `i${Date.now()}`, columnId, teamId,
-      tag: newItemTag, text: newItemText.trim(), flag: null,
+      tag: tag || null, text, flag: null,
     };
     saveData({ ...data, items: [...data.items, newItem] });
     setNewItemText(""); setAddingTo(null);
@@ -771,9 +805,11 @@ export default function RoadmapTracker() {
                                   {!isPreview && !isExpanded && (
                                     <GripVertical className="w-3 h-3 text-stone-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                                   )}
-                                  <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagColor(item.tag)}`}>
-                                    {item.tag}
-                                  </span>
+                                  {item.tag && (
+                                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>
+                                      {item.tag}
+                                    </span>
+                                  )}
                                   <span className="flex-1 leading-snug flex flex-wrap items-center gap-1 min-w-0">
                                     <span className="truncate">{cleanText}</span>
                                     {date && (
@@ -842,12 +878,17 @@ export default function RoadmapTracker() {
                                     {!isPreview ? (
                                       <>
                                         <div>
-                                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-0.5">Title</label>
+                                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-0.5">
+                                            Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
+                                          </label>
                                           <input
                                             type="text"
-                                            defaultValue={item.text}
+                                            defaultValue={item.tag ? `${item.tag}: ${item.text}` : item.text}
                                             autoFocus
-                                            onBlur={(e) => updateItem(item.id, { text: e.target.value })}
+                                            onBlur={(e) => {
+                                              const { tag, text } = extractTag(e.target.value.trim());
+                                              updateItem(item.id, { tag: tag || null, text: text || e.target.value.trim() });
+                                            }}
                                             onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }}
                                             className="w-full text-xs border border-stone-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-stone-500"
                                           />
@@ -929,48 +970,47 @@ export default function RoadmapTracker() {
                           })}
 
                           {/* Add Item Form */}
-                          {isAdding && (
-                            <div className="rounded-md border-2 border-dashed border-stone-400 p-2 bg-white space-y-1.5">
-                              <div className="flex gap-1.5">
-                                <select
-                                  value={newItemTag}
-                                  onChange={(e) => setNewItemTag(e.target.value)}
-                                  className="text-[10px] font-bold border border-stone-300 rounded px-1 py-0.5"
-                                >
-                                  <option value="FR/DE">FR/DE</option>
-                                  <option value="DE">DE</option>
-                                  <option value="FR">FR</option>
-                                  <option value="AT">AT</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  value={newItemText}
-                                  onChange={(e) => setNewItemText(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") addItem(col.id, team.id);
-                                    if (e.key === "Escape") { setAddingTo(null); setNewItemText(""); }
-                                  }}
-                                  autoFocus
-                                  placeholder="Describe the item..."
-                                  className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5"
-                                />
+                          {isAdding && (() => {
+                            const liveTag = extractTag(newItemText.trim()).tag;
+                            const liveStyle = liveTag ? getTagStyle(liveTag) : null;
+                            return (
+                              <div className="rounded-md border-2 border-dashed border-stone-400 p-2 bg-white space-y-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  {liveTag && (
+                                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${liveStyle}`}>
+                                      {liveTag}
+                                    </span>
+                                  )}
+                                  <input
+                                    type="text"
+                                    value={newItemText}
+                                    onChange={(e) => setNewItemText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") addItem(col.id, team.id);
+                                      if (e.key === "Escape") { setAddingTo(null); setNewItemText(""); }
+                                    }}
+                                    autoFocus
+                                    placeholder="FR: feature name, or just a title…"
+                                    className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5"
+                                  />
+                                </div>
+                                <div className="flex gap-1.5 justify-end">
+                                  <button
+                                    onClick={() => { setAddingTo(null); setNewItemText(""); }}
+                                    className="text-[10px] px-2 py-0.5 text-stone-600 hover:text-stone-900"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => addItem(col.id, team.id)}
+                                    className="text-[10px] px-2 py-0.5 bg-stone-800 text-white rounded hover:bg-stone-700"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex gap-1.5 justify-end">
-                                <button
-                                  onClick={() => { setAddingTo(null); setNewItemText(""); }}
-                                  className="text-[10px] px-2 py-0.5 text-stone-600 hover:text-stone-900"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  onClick={() => addItem(col.id, team.id)}
-                                  className="text-[10px] px-2 py-0.5 bg-stone-800 text-white rounded hover:bg-stone-700"
-                                >
-                                  Add
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       </div>
                     );
