@@ -1,2 +1,35 @@
 id,columnId,teamId,tag,text,flag
-
+i1,done,firefly,AT,IWT Austria on Auth0 - 05 JAN,
+i2,done,firefly,FR/DE,Breached password protection (monitoring mode only) - 05 JAN,
+i3,done,firefly,DE,IMMONET Sunset - 15 FEB,
+i4,done,waterfly,FR/DE,Phone Number Verification as a service (Vonage → Twilio) - Q4 2025,
+i5,done,waterfly,DE,New 9-digit Customer facing ID (prev. 21 digit AVIVUserID) - 26 JAN,
+i6,done,waterfly,DE,IMMONET Sunset - 15 FEB,
+i7,done,waterfly,FR,OPT-IN's for Homes4You (DE on the next iteration) - 31 MAR,
+i8,coming,firefly,FR/DE,Expose MFA confidence factor in events and emails to reduce Fraud,done
+i9,coming,firefly,FR/DE,PLATFORM SPLIT (DE & FR) - by beginning of JUNE,
+i10,coming,firefly,FR/DE,Breached password protection - Mid APR,risk
+i11,coming,firefly,FR/DE,Revoking sessions upon password RESET/CHANGE - MAY (was 25MAR),risk
+i12,coming,firefly,FR,Auth0 for SL PRO (will be done by SUPPLY team in FR),done
+i13,coming,firefly,FR/DE,Domain Events: Exposing the events to Snowflake,warning
+i14,coming,firefly,DE,Enrol ALL B2B users on SMS MFA,risk
+i15,coming,firefly,FR/DE,BLOCK account creation based on suspicious first/last names,warning
+i16,coming,waterfly,FR/DE,PLATFORM SPLIT (DE & FR),warning
+i17,coming,waterfly,FR/DE,OPT-IN's (BAU inc. country split),warning
+i18,coming,waterfly,FR,Migrate CUSTOMER.IO (SI/LI) to use WL OPT-IN service,warning
+i19,coming,waterfly,FR/DE,Export all OPT-INs to SNOWFLAKE,warning
+i20,coming,waterfly,DE,Document Management Service (upload/download/delete/sharing),
+i21,coming,waterfly,DE,ID Verification - for private listings to get Trusted badge on published listings,
+i22,coming,waterfly,DE,Deutsche Bank Data Export - MAY,warning
+i23,coming,waterfly,FR/DE,Domain Events: Exposing the events to Snowflake,
+i24,coming,waterfly,DE,Call Tracking - PII data storage (real-time logs/transcript/summaries),
+i25,coming,monet,DE,Integration with SCHUFA,risk
+i26,coming,monet,DE,SCHUFA: Create all frontend components based on NEW designs,warning
+i27,coming,monet,DE,SCHUFA: Setting up infra and deployment pipeline,warning
+i28,after,firefly,DE,Legacy Decommissioning,
+i29,after,firefly,DE,Backoffice support: Enable BO agents to revoke user sessions,
+i30,after,firefly,DE,Masquerade feature via BACKOFFICE,
+i31,after,firefly,FR/DE,Passwordless (OTP code via email) + B2B/B2C tenant split,risk
+i32,after,firefly,FR/DE,Login & Signup UX Improvements (Introduce Modal),
+i33,after,firefly,FR/DE,Login/Signup with MOBILE NUMBER,
+i34,future,firefly,DE,Trusted Devices Fingerprints (Low Impact),
