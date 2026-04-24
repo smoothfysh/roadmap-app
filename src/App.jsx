@@ -396,8 +396,21 @@ export default function RoadmapTracker() {
           alert("No items found in that CSV file.");
           return;
         }
-        if (confirm(`Import ${items.length} items? This will replace your current roadmap.`)) {
-          saveData({ ...data, items });
+        // Detect team IDs in the CSV that don't exist in the current teams list
+        const knownTeamIds = new Set(data.teams.map((t) => t.id));
+        const newTeams = [...new Set(items.map((i) => i.teamId).filter(Boolean))]
+          .filter((id) => !knownTeamIds.has(id))
+          .map((id) => ({ id, name: id.toUpperCase().replace(/[-_]/g, " ") }));
+        // Merge: keep existing items, append imported ones (skip any whose ID already exists)
+        const existingIds = new Set(data.items.map((i) => i.id));
+        const newItems = items.filter((i) => !existingIds.has(i.id));
+        const confirmMsg = [
+          `Add ${newItems.length} new item${newItems.length === 1 ? "" : "s"} from the CSV? Your existing items will be kept.`,
+          newTeams.length > 0 ? `\n${newTeams.length} new team row${newTeams.length === 1 ? "" : "s"} will also be added: ${newTeams.map((t) => t.name).join(", ")}` : "",
+          existingIds.size > 0 && items.length - newItems.length > 0 ? `\n${items.length - newItems.length} item${items.length - newItems.length === 1 ? "" : "s"} skipped (IDs already exist).` : "",
+        ].join("");
+        if (confirm(confirmMsg)) {
+          saveData({ ...data, teams: [...data.teams, ...newTeams], items: [...data.items, ...newItems] });
         }
       } catch (err) {
         alert("Failed to parse CSV: " + err.message);
