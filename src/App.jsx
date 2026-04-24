@@ -92,12 +92,59 @@ function downloadCsv(items, filename = "roadmap.csv") {
   document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
-// ---------- Share encoding ----------
-function encodeShareData(d) {
-  return btoa(encodeURIComponent(JSON.stringify(d)));
+// ---------- Share encoding — deflate-compressed URL-safe base64 ----------
+// Compressed links are ~5-10x shorter than raw JSON, keeping URLs short enough for Slack.
+// "z" prefix marks the compressed format; old uncompressed links still decode via fallback.
+async function encodeShareData(d) {
+  const json = JSON.stringify(d);
+  if (typeof CompressionStream !== "undefined") {
+    try {
+      const cs = new CompressionStream("deflate-raw");
+      const writer = cs.writable.getWriter();
+      writer.write(new TextEncoder().encode(json));
+      writer.close();
+      const buf = await new Response(cs.readable).arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      bytes.forEach((b) => (binary += String.fromCharCode(b)));
+      return "z" + btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    } catch { /* fall through */ }
+  }
+  // Fallback: plain URL-safe base64 (no compression)
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
-function decodeShareData(str) {
-  try { return JSON.parse(decodeURIComponent(atob(str))); } catch { return null; }
+
+async function decodeShareData(str) {
+  // Compressed format (z-prefix)
+  if (str.startsWith("z")) {
+    try {
+      const b64 = str.slice(1).replace(/-/g, "+").replace(/_/g, "/");
+      const padded = b64 + "==".slice(0, (4 - (b64.length % 4)) % 4);
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const ds = new DecompressionStream("deflate-raw");
+      const writer = ds.writable.getWriter();
+      writer.write(bytes);
+      writer.close();
+      return JSON.parse(await new Response(ds.readable).text());
+    } catch { return null; }
+  }
+  // URL-safe base64 (previous version, no compression)
+  try {
+    const b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "==".slice(0, (4 - (b64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    // Oldest format: btoa(encodeURIComponent(json))
+    try { return JSON.parse(decodeURIComponent(atob(str))); } catch { return null; }
+  }
 }
 
 // ---------- Date extraction ----------
@@ -217,6 +264,7 @@ export default function RoadmapTracker() {
   const [sharedPreview, setSharedPreview] = useState(null);
   const [saveCopyName, setSaveCopyName] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
   const fileInputRef = useRef(null);
   const backupInputRef = useRef(null);
 
@@ -226,7 +274,7 @@ export default function RoadmapTracker() {
       // Detect share link in URL hash
       const hash = window.location.hash;
       if (hash.startsWith("#share=")) {
-        const decoded = decodeShareData(hash.slice(7));
+        const decoded = await decodeShareData(hash.slice(7));
         if (decoded?.columns && decoded?.teams && decoded?.items) {
           setSharedPreview(decoded);
           // Remove hash from URL so refresh doesn't re-trigger the preview
@@ -299,15 +347,20 @@ export default function RoadmapTracker() {
 
   // ---------- Share ----------
   const handleShare = async () => {
-    const encoded = encodeShareData(data);
-    const url = `${window.location.origin}${window.location.pathname}#share=${encoded}`;
+    setShareLoading(true);
     try {
-      await navigator.clipboard.writeText(url);
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2500);
-    } catch {
-      // Fallback for browsers that block clipboard without interaction
-      prompt("Copy this share link:", url);
+      const encoded = await encodeShareData(data);
+      const url = `${window.location.origin}${window.location.pathname}#share=${encoded}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2500);
+      } catch {
+        // Fallback for browsers that block clipboard without interaction
+        prompt("Copy this share link:", url);
+      }
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -603,7 +656,8 @@ export default function RoadmapTracker() {
               {/* Share button */}
               <button
                 onClick={handleShare}
-                className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors ${
+                disabled={shareLoading}
+                className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors disabled:opacity-60 disabled:cursor-wait ${
                   shareCopied
                     ? "border-emerald-400 bg-emerald-50 text-emerald-700"
                     : "border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100"
@@ -611,7 +665,7 @@ export default function RoadmapTracker() {
                 title="Copy a share link to your clipboard — recipients open the link and see a read-only preview with the option to save their own copy"
               >
                 <Share2 className="w-3 h-3" />
-                {shareCopied ? "Link copied!" : "Share"}
+                {shareLoading ? "Generating…" : shareCopied ? "Link copied!" : "Share"}
               </button>
               <button
                 onClick={() => exportCsv(displayData.items)}
@@ -1044,10 +1098,10 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Click</span> any item to expand · edit title, notes, JIRA &amp; Confluence links</span>
               <span><span className="font-bold">Drag</span> any item to reorder or move between columns</span>
               <span><span className="font-bold">Click</span> team name or quarter label to rename · status dot to cycle flag</span>
-              <span><span className="font-bold">Hover</span> an item to reveal delete</span>
+              <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v1.0.0</span>
+          <span className="ml-auto opacity-40">v1.0.1</span>
         </div>
       </div>
     </div>
