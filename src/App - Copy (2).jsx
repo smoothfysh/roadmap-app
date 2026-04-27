@@ -16,7 +16,6 @@ const SCOPE_NAME = (() => {
 // ---------- Seed data ----------
 const seedData = {
   title: "My Roadmap",
-  heading: "2026",
   columns: [
     { id: "done", title: "DONE", subtitle: "Released stuff... already LIVE!", color: "green" },
     { id: "coming", title: "COMING SOON", subtitle: "Q2 2026", color: "blue" },
@@ -262,7 +261,6 @@ export default function RoadmapTracker() {
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
-  const [editingHeading, setEditingHeading] = useState(false);
   const [sharedPreview, setSharedPreview] = useState(null);
   const [saveCopyName, setSaveCopyName] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
@@ -566,11 +564,6 @@ export default function RoadmapTracker() {
     saveData({ ...data, title: trimmed });
   };
 
-  const updateHeading = (newHeading) => {
-    const trimmed = newHeading.trim();
-    saveData({ ...data, heading: trimmed || seedData.heading });
-  };
-
   const updateColumnSubtitle = (columnId, newSubtitle) => {
     const newColumns = data.columns.map((c) =>
       c.id === columnId ? { ...c, subtitle: newSubtitle } : c
@@ -610,8 +603,7 @@ export default function RoadmapTracker() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const slug = (data.title || "roadmap").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    link.href = url; link.download = `${slug}-${today}.json`;
+    link.href = url; link.download = `roadmap-backup-${today}.json`;
     document.body.appendChild(link); link.click();
     document.body.removeChild(link); URL.revokeObjectURL(url);
   };
@@ -813,29 +805,9 @@ export default function RoadmapTracker() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {editingHeading && !isPreview ? (
-              <input
-                type="text"
-                defaultValue={displayData.heading || seedData.heading}
-                autoFocus
-                onBlur={(e) => { updateHeading(e.target.value); setEditingHeading(false); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.target.blur();
-                  if (e.key === "Escape") setEditingHeading(false);
-                }}
-                className="text-4xl font-black tracking-tight text-stone-900 border border-stone-500 px-1 bg-white w-36"
-                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-              />
-            ) : (
-              <h1
-                className={`text-4xl font-black tracking-tight text-stone-900 ${!isPreview ? "cursor-text hover:text-stone-600" : ""}`}
-                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                onClick={() => { if (!isPreview) setEditingHeading(true); }}
-                title={!isPreview ? "Click to edit" : undefined}
-              >
-                {displayData.heading || seedData.heading}
-              </h1>
-            )}
+            <h1 className="text-4xl font-black tracking-tight text-stone-900" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+              2026
+            </h1>
             <div className="flex gap-1.5">
               <span className="w-3.5 h-3.5 rounded-full bg-emerald-500" title="On track"></span>
               <span className="w-3.5 h-3.5 rounded-full bg-amber-400" title="At risk"></span>
