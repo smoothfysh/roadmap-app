@@ -1,0 +1,457 @@
+{
+  "title": "DEMAND: Growth Streams Roadmap",
+  "columns": [
+    {
+      "id": "done",
+      "title": "DONE",
+      "subtitle": "Released stuff... already LIVE!",
+      "color": "green"
+    },
+    {
+      "id": "coming",
+      "title": "COMING SOON",
+      "subtitle": "Q2 2026",
+      "color": "blue"
+    },
+    {
+      "id": "after",
+      "title": "AFTER THAT",
+      "subtitle": "Q3 2026",
+      "color": "amber"
+    },
+    {
+      "id": "future",
+      "title": "FUTURE",
+      "subtitle": "Beyond the next 6 months",
+      "color": "slate"
+    }
+  ],
+  "teams": [
+    {
+      "id": "firefly",
+      "name": "AUTHENTICATION (Team FIREFLY)"
+    },
+    {
+      "id": "waterfly",
+      "name": "USER MANAGEMENT (Team WATERFLY)"
+    },
+    {
+      "id": "monet",
+      "name": "GROWTH STREAMS (Team MONET)"
+    }
+  ],
+  "items": [
+    {
+      "id": "i1",
+      "columnId": "done",
+      "teamId": "firefly",
+      "tag": "AT",
+      "text": "IWT Austria on Auth0 - 05 JAN",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i2",
+      "columnId": "done",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Breached password detection (monitoring) - 05 JAN",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i3",
+      "columnId": "done",
+      "teamId": "firefly",
+      "tag": "DE",
+      "text": "IMMONET Sunset - 15 FEB",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i4",
+      "columnId": "done",
+      "teamId": "waterfly",
+      "tag": "FR/DE",
+      "text": "Phone Number Verification as a service (Vonage → Twilio) - Q4 2025",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i5",
+      "columnId": "done",
+      "teamId": "waterfly",
+      "tag": "DE",
+      "text": "New 9-digit Customer facing ID (prev. 21 digit AVIVUserID) - 26 JAN",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i6",
+      "columnId": "done",
+      "teamId": "waterfly",
+      "tag": "DE",
+      "text": "IMMONET Sunset - 15 FEB",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i7",
+      "columnId": "done",
+      "teamId": "waterfly",
+      "tag": "FR",
+      "text": "OPT-IN's for Homes4You (DE on the next iteration) - 31 MAR",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i8",
+      "columnId": "coming",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Expose MFA confidence factor in events and emails to reduce Fraud",
+      "flag": "done",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i12",
+      "columnId": "coming",
+      "teamId": "firefly",
+      "tag": "FR",
+      "text": "Auth0 for SL PRO (will be done by SUPPLY team in FR)",
+      "flag": "done",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i9",
+      "columnId": "coming",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "PLATFORM SPLIT - mid JUNE",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i13",
+      "columnId": "coming",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Domain Events: Exposing the events to Snowflake",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i11",
+      "columnId": "coming",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Revoking sessions upon password RESET/CHANGE - MAY (was 25MAR)",
+      "flag": "risk",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i16",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "FR/DE",
+      "text": "PLATFORM SPLIT - mid JUNE",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i17",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "FR/DE",
+      "text": "OPT-IN's (country split)",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i18",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "FR",
+      "text": "Migrate CUSTOMER.IO (SI/LI) to use WL OPT-IN service - MAY",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i19",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "FR/DE",
+      "text": "Export all OPT-INs to SNOWFLAKE",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i22",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "DE",
+      "text": "Deutsche Bank Data Export - MAY",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i24",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "DE",
+      "text": "Call Tracking - Pii data storage (phone numbers only)",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i20",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "DE",
+      "text": "Document Management Service (upload/download/delete/sharing)",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i21",
+      "columnId": "coming",
+      "teamId": "waterfly",
+      "tag": "DE",
+      "text": "ID Verification - for SCHUFA funnel",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i25",
+      "columnId": "coming",
+      "teamId": "monet",
+      "tag": "DE",
+      "text": "Integration with SCHUFA",
+      "flag": "risk",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i26",
+      "columnId": "coming",
+      "teamId": "monet",
+      "tag": "DE",
+      "text": "SCHUFA: Create all frontend components based on NEW designs",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i27",
+      "columnId": "coming",
+      "teamId": "monet",
+      "tag": "DE",
+      "text": "SCHUFA: Setting up infra and deployment pipeline",
+      "flag": "warning",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i28",
+      "columnId": "after",
+      "teamId": "firefly",
+      "tag": "DE",
+      "text": "Legacy Decommissioning",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i29",
+      "columnId": "after",
+      "teamId": "firefly",
+      "tag": "DE",
+      "text": "Backoffice support: Enable BO agents to revoke user sessions",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i30",
+      "columnId": "after",
+      "teamId": "firefly",
+      "tag": "DE",
+      "text": "Masquerade feature via BACKOFFICE",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i31",
+      "columnId": "after",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Passwordless (OTP code via email) + B2B/B2C tenant split",
+      "flag": "risk",
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i32",
+      "columnId": "after",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Login & Signup UX Improvements (Introduce Modal)",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i33",
+      "columnId": "after",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Login/Signup with MOBILE NUMBER",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i34",
+      "columnId": "future",
+      "teamId": "firefly",
+      "tag": "DE",
+      "text": "Trusted Devices Fingerprints (Low Impact)",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i15",
+      "columnId": "done",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "BLOCK acc. creation on suspicious first/last names - 20 APR",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i10",
+      "columnId": "done",
+      "teamId": "firefly",
+      "tag": "FR/DE",
+      "text": "Breached password protection - 21 APR",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i14",
+      "columnId": "coming",
+      "teamId": "firefly",
+      "tag": "DE",
+      "text": "Enrol ALL B2B users on SMS MFA",
+      "flag": "risk",
+      "description": "there’s some legacy flow that’s overriding whatever we provision. currently very complex / Maki is investigating but still no clarity",
+      "jiraUrl": null,
+      "confluenceUrl": "https://avivgroup.atlassian.net/wiki/spaces/APE/pages/2928574565"
+    },
+    {
+      "id": "i1776858742442",
+      "columnId": "coming",
+      "teamId": "monet",
+      "tag": "DE",
+      "text": "Financing Funnel - iOS Native",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i1776943279335",
+      "columnId": "after",
+      "teamId": "waterfly",
+      "tag": "FR/DE",
+      "text": "Call Tracking - Pii data storage (recording / transcript / summary)",
+      "flag": null,
+      "description": null,
+      "jiraUrl": null,
+      "confluenceUrl": null
+    },
+    {
+      "id": "i1777043999029",
+      "columnId": "coming",
+      "teamId": "monet",
+      "tag": "DE",
+      "text": "Update Visual in web2app banner - End of APR",
+      "flag": null,
+      "description": "As part of the new IWT brand campaign launching on 30 Apr 2026 all visuals on the website should use the new campaign materials.",
+      "jiraUrl": "https://avivgroup.atlassian.net/browse/SKRFIN-810"
+    },
+    {
+      "id": "i1777044155003",
+      "columnId": "after",
+      "teamId": "waterfly",
+      "tag": "FR/DE",
+      "text": "ID Verification for TRUSTED badge",
+      "flag": null
+    },
+    {
+      "id": "i1777280170344",
+      "columnId": "after",
+      "teamId": "monet",
+      "tag": "FR/DE",
+      "text": "Migrating financing emails from legacy email service to Salesforce (SFMC)",
+      "flag": null,
+      "jiraUrl": "https://avivgroup.atlassian.net/browse/SKRFIN-806"
+    }
+  ]
+}

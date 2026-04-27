@@ -53,7 +53,7 @@ Stored in `localStorage` under key `roadmap-data` (or `roadmap-data-{scope}` for
 ## Key behaviours
 
 - **Share links**: `#share=<compressed>` in URL hash → non-destructive read-only preview with option to save as named local copy. Links are deflate-raw compressed to stay short enough for Slack.
-- **Named scopes**: `?scope=teamname` loads/saves a separate `localStorage` key, allowing multiple independent roadmaps in the same browser.
+- **Named scopes**: `?scope=name` fetches `/name.json` from the public folder and shows it as a read-only preview. If the file doesn't exist, an error screen is shown. To publish a scope: click **Backup**, rename the file to `<scope>.json`, drop it in `public/`, and deploy. Personal saved copies (via "Save & open" in the share banner) are stored in `localStorage` with a `_savedCopy` marker and load even when no matching JSON file exists.
 - **Tag auto-detection**: Titles prefixed `FR: …`, `DE/AT: …` etc. split into `tag` + `text` at save time. Country badge colours are in the `TAG_STYLES` constant — easy to extend.
 - **Date pills**: Date-like suffixes (e.g. `- Mid APR`, `Q2 2026`) are stripped from display text and shown as a separate pill badge.
 - **Expand/collapse**: Clicking an item expands it to show/edit description, JIRA URL, and Confluence URL. Only one item open at a time.

@@ -288,20 +288,28 @@ export default function RoadmapTracker() {
       // from previous visits cannot mask a missing-file error.
       if (SCOPE_NAME) {
         try {
-          const res = await fetch(`/${SCOPE_NAME}.csv`);
-          const isRealCsv = res.ok && !(res.headers.get("content-type") || "").includes("text/html");
-          if (isRealCsv) {
-            const text = await res.text();
-            const items = csvToItems(text);
-            const uniqueTeamIds = [...new Set(items.map((i) => i.teamId).filter(Boolean))];
-            const teams = uniqueTeamIds.length > 0
-              ? uniqueTeamIds.map((id) => ({ id, name: id.toUpperCase().replace(/[-_]/g, " ") }))
-              : seedData.teams;
-            const scopeData = { ...seedData, teams, items };
-            setData(scopeData);
-            setSharedPreview(scopeData);
-            setLoading(false);
-            return;
+          const res = await fetch(`/${SCOPE_NAME}.json`);
+          const isRealJson = res.ok && !(res.headers.get("content-type") || "").includes("text/html");
+          if (isRealJson) {
+            const parsed = await res.json();
+            if (parsed?.columns && parsed?.teams && parsed?.items) {
+              // Apply the same migrations as the localStorage path
+              parsed.columns = parsed.columns.map((c) =>
+                c.id === "future" && c.color === "rose" ? { ...c, color: "slate" } : c
+              );
+              if (!parsed.title) parsed.title = seedData.title;
+              const knownTeamIds = new Set(parsed.teams.map((t) => t.id));
+              const orphanIds = [...new Set(
+                parsed.items.filter((i) => i.teamId && !knownTeamIds.has(i.teamId)).map((i) => i.teamId)
+              )];
+              orphanIds.forEach((id) =>
+                parsed.teams.push({ id, name: id.toUpperCase().replace(/[-_]/g, " ") })
+              );
+              setData(parsed);
+              setSharedPreview(parsed);
+              setLoading(false);
+              return;
+            }
           }
         } catch { /* fall through */ }
 
@@ -644,7 +652,7 @@ export default function RoadmapTracker() {
             No roadmap exists for scope <span className="font-mono font-bold">"{scopeError}"</span>.
           </p>
           <p className="text-stone-400 text-xs font-mono">
-            Expected file: <span className="font-semibold">{scopeError}.csv</span> in the public folder.
+            Expected file: <span className="font-semibold">{scopeError}.json</span> in the public folder.
           </p>
           <a
             href={window.location.pathname}
