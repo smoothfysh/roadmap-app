@@ -265,6 +265,7 @@ export default function RoadmapTracker() {
   const [saveCopyName, setSaveCopyName] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
+  const [scopeError, setScopeError] = useState(null);
   const fileInputRef = useRef(null);
   const backupInputRef = useRef(null);
 
@@ -282,7 +283,49 @@ export default function RoadmapTracker() {
         }
       }
 
-      // Load own data (always, so dismissing preview shows the user's roadmap)
+      // If a scope is set, the CSV file is the source of truth — check it before localStorage.
+      // This ensures colleagues always see the latest pushed file, and stale cached data
+      // from previous visits cannot mask a missing-file error.
+      if (SCOPE_NAME) {
+        try {
+          const res = await fetch(`/${SCOPE_NAME}.csv`);
+          const isRealCsv = res.ok && !(res.headers.get("content-type") || "").includes("text/html");
+          if (isRealCsv) {
+            const text = await res.text();
+            const items = csvToItems(text);
+            const uniqueTeamIds = [...new Set(items.map((i) => i.teamId).filter(Boolean))];
+            const teams = uniqueTeamIds.length > 0
+              ? uniqueTeamIds.map((id) => ({ id, name: id.toUpperCase().replace(/[-_]/g, " ") }))
+              : seedData.teams;
+            const scopeData = { ...seedData, teams, items };
+            setData(scopeData);
+            setSharedPreview(scopeData);
+            setLoading(false);
+            return;
+          }
+        } catch { /* fall through */ }
+
+        // File not found — only load from localStorage if it was explicitly saved as a personal copy
+        // (marked with _savedCopy: true). Stale entries written by old code are ignored.
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed._savedCopy) {
+              setData(parsed);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch { /* fall through */ }
+
+        // No file and no saved copy — show the error screen
+        setScopeError(SCOPE_NAME);
+        setLoading(false);
+        return;
+      }
+
+      // No scope — load own data from localStorage if available.
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -310,10 +353,10 @@ export default function RoadmapTracker() {
           return;
         }
       } catch (e) {
-        // fall through to CSV load
+        // fall through to CSV seed
       }
 
-      // No localStorage — load from roadmap.csv in public folder.
+      // No scope, no localStorage — load default roadmap.csv seed.
       // Derive teams from the teamIds in the CSV so items always match their teams.
       try {
         const res = await fetch("/roadmap.csv");
@@ -369,7 +412,7 @@ export default function RoadmapTracker() {
     if (!name) return;
     const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
     if (!slug) return;
-    localStorage.setItem(`roadmap-data-${slug}`, JSON.stringify(sharedPreview));
+    localStorage.setItem(`roadmap-data-${slug}`, JSON.stringify({ ...sharedPreview, _savedCopy: true }));
     window.location.href = `${window.location.pathname}?scope=${slug}`;
   };
 
@@ -588,6 +631,28 @@ export default function RoadmapTracker() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
         <div className="text-stone-600 font-mono text-sm tracking-wider">LOADING ROADMAP...</div>
+      </div>
+    );
+  }
+
+  if (scopeError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50">
+        <div className="text-center space-y-3 max-w-sm px-4">
+          <div className="text-stone-800 font-mono font-bold text-sm tracking-wider uppercase">Roadmap not found</div>
+          <p className="text-stone-600 text-sm">
+            No roadmap exists for scope <span className="font-mono font-bold">"{scopeError}"</span>.
+          </p>
+          <p className="text-stone-400 text-xs font-mono">
+            Expected file: <span className="font-semibold">{scopeError}.csv</span> in the public folder.
+          </p>
+          <a
+            href={window.location.pathname}
+            className="inline-block mt-2 text-xs text-indigo-600 hover:text-indigo-900 underline underline-offset-2 font-mono"
+          >
+            ← Go to my roadmap
+          </a>
+        </div>
       </div>
     );
   }
@@ -1114,7 +1179,7 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v1.0.1</span>
+          <span className="ml-auto opacity-40">v1.1.0</span>
         </div>
       </div>
     </div>
