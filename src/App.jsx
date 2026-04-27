@@ -763,7 +763,7 @@ export default function RoadmapTracker() {
                 title="Copy a share link to your clipboard — recipients open the link and see a read-only preview with the option to save their own copy"
               >
                 <Share2 className="w-3 h-3" />
-                {shareLoading ? "Generating…" : shareCopied ? "Link copied!" : "Share"}
+                {shareLoading ? "Generating…" : shareCopied ? "Link copied!" : "Share as URL Encoded"}
               </button>
               <button
                 onClick={() => exportCsv(displayData.items)}
