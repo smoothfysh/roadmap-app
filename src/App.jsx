@@ -13,6 +13,10 @@ const SCOPE_NAME = (() => {
   try { return new URLSearchParams(window.location.search).get("scope") || null; } catch { return null; }
 })();
 
+const LOCATION_URL = (() => {
+  try { return new URLSearchParams(window.location.search).get("location") || null; } catch { return null; }
+})();
+
 // ---------- Seed data ----------
 const seedData = {
   title: "My Roadmap",
@@ -268,6 +272,7 @@ export default function RoadmapTracker() {
   const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [scopeError, setScopeError] = useState(null);
+  const [locationError, setLocationError] = useState(false);
   const fileInputRef = useRef(null);
   const backupInputRef = useRef(null);
 
@@ -283,6 +288,38 @@ export default function RoadmapTracker() {
           // Remove hash from URL so refresh doesn't re-trigger the preview
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
+      }
+
+      // If a ?location= URL is provided, fetch the JSON from that external URL.
+      if (LOCATION_URL) {
+        let loaded = false;
+        try {
+          const res = await fetch(LOCATION_URL);
+          if (res.ok) {
+            const text = await res.text();
+            const parsed = JSON.parse(text);
+            if (parsed?.columns && parsed?.teams && parsed?.items) {
+              parsed.columns = parsed.columns.map((c) =>
+                c.id === "future" && c.color === "rose" ? { ...c, color: "slate" } : c
+              );
+              if (!parsed.title) parsed.title = seedData.title;
+              const knownTeamIds = new Set(parsed.teams.map((t) => t.id));
+              const orphanIds = [...new Set(
+                parsed.items.filter((i) => i.teamId && !knownTeamIds.has(i.teamId)).map((i) => i.teamId)
+              )];
+              orphanIds.forEach((id) =>
+                parsed.teams.push({ id, name: id.toUpperCase().replace(/[-_]/g, " ") })
+              );
+              setData(parsed);
+              setSharedPreview(parsed);
+              loaded = true;
+            }
+          }
+        } catch { /* network error, CORS, or invalid JSON */ }
+
+        if (!loaded) setLocationError(true);
+        setLoading(false);
+        return;
       }
 
       // If a scope is set, the CSV file is the source of truth — check it before localStorage.
@@ -651,6 +688,26 @@ export default function RoadmapTracker() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
         <div className="text-stone-600 font-mono text-sm tracking-wider">LOADING ROADMAP...</div>
+      </div>
+    );
+  }
+
+  if (locationError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50">
+        <div className="text-center space-y-3 max-w-md px-4">
+          <div className="text-stone-800 font-mono font-bold text-sm tracking-wider uppercase">Roadmap not found</div>
+          <p className="text-stone-600 text-sm">
+            Could not load a roadmap from the specified URL. The file may not exist, or the server may not allow cross-origin requests.
+          </p>
+          <p className="text-stone-400 text-xs font-mono break-all">{LOCATION_URL}</p>
+          <a
+            href={window.location.pathname}
+            className="inline-block mt-2 text-xs text-indigo-600 hover:text-indigo-900 underline underline-offset-2 font-mono"
+          >
+            ← Go to my roadmap
+          </a>
+        </div>
       </div>
     );
   }
@@ -1219,7 +1276,7 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v1.1.0</span>
+          <span className="ml-auto opacity-40">v1.2.0</span>
         </div>
       </div>
     </div>
