@@ -264,6 +264,7 @@ export default function RoadmapTracker() {
   const [addingTo, setAddingTo] = useState(null); // { columnId, teamId }
   const [newItemText, setNewItemText] = useState("");
   const [expandedItem, setExpandedItem] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1097,7 +1098,7 @@ export default function RoadmapTracker() {
                                   </button>
                                   {!isPreview && (
                                     <button
-                                      onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
+                                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: item.id, text: item.text }); }}
                                       className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-600"
                                       title="Delete"
                                     >
@@ -1343,7 +1344,7 @@ export default function RoadmapTracker() {
                     </button>
                   </div>
                   <button
-                    onClick={() => { deleteItem(modalItem.id); setExpandedItem(null); }}
+                    onClick={() => setDeleteConfirm({ id: modalItem.id, text: modalItem.text })}
                     className="text-[10px] font-mono text-stone-400 hover:text-rose-600 uppercase tracking-wider border border-stone-200 hover:border-rose-300 px-2.5 py-1 rounded transition-colors"
                   >
                     Delete
@@ -1354,6 +1355,38 @@ export default function RoadmapTracker() {
           </div>
         );
       })()}
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div
+          className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-6 z-[60]"
+          onClick={() => setDeleteConfirm(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4">
+              <div className="text-sm font-bold text-stone-900 mb-1">Delete this item?</div>
+              <p className="text-xs text-stone-500 leading-relaxed line-clamp-2">"{deleteConfirm.text}"</p>
+            </div>
+            <div className="px-5 pb-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="text-xs font-mono uppercase tracking-wider text-stone-600 hover:text-stone-900 border border-stone-200 hover:border-stone-400 px-3 py-1.5 rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { deleteItem(deleteConfirm.id); setDeleteConfirm(null); setExpandedItem(null); }}
+                className="text-xs font-mono uppercase tracking-wider text-white bg-rose-500 hover:bg-rose-600 px-3 py-1.5 rounded transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
