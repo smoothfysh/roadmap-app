@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modal Preview — Roadmap App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'IBM Plex Mono', monospace;
+      background: #fafaf9;
+      color: #1c1917;
+      min-height: 100vh;
+    }
+
+    /* ── Fake roadmap background ── */
+    .page {
+      padding: 24px;
+      filter: blur(1px) brightness(0.97);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #e7e5e4;
+      border-bottom: 1px solid #d6d3d1;
+      padding: 10px 20px;
+      margin: -24px -24px 20px;
+    }
+    .topbar-title { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #57534e; }
+    .topbar-btn {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+      border: 1px solid #d6d3d1; background: #fff; color: #57534e;
+      padding: 4px 10px; border-radius: 4px; margin-left: auto;
+    }
+    .topbar-btn + .topbar-btn { margin-left: 6px; }
+
+    .heading { font-size: 36px; font-weight: 900; letter-spacing: -0.02em; color: #1c1917; margin-bottom: 16px; }
+
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+    .col-header {
+      border-radius: 8px 8px 0 0;
+      padding: 16px;
+      text-align: center;
+    }
+    .col-header h2 { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; }
+    .col-header p  { font-size: 10px; margin-top: 4px; opacity: 0.75; }
+
+    .col-body { border-radius: 0 0 8px 8px; padding: 12px; min-height: 320px; }
+
+    .team-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      text-align: center; padding: 6px 8px; background: rgba(0,0,0,0.06);
+      border-radius: 6px; margin-bottom: 8px; color: #1c1917;
+    }
+
+    .card {
+      border-radius: 6px; border: 1px solid; padding: 6px 8px;
+      font-size: 11px; margin-bottom: 6px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .card-text { flex: 1; }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-grey   { border: 1.5px solid #d6d3d1; }
+    .dot-rose   { background: #f43f5e; }
+    .dot-amber  { background: #fbbf24; }
+
+    /* column colours */
+    .green-hdr  { background: #dcfce7; color: #14532d; }
+    .green-body { background: #f0fdf4; }
+    .green-card { background: #fff; border-color: #bbf7d0; color: #1c1917; }
+
+    .blue-hdr   { background: #dbeafe; color: #1e3a8a; }
+    .blue-body  { background: #eff6ff; }
+    .blue-card  { background: #fff; border-color: #bfdbfe; color: #1c1917; }
+
+    .amber-hdr  { background: #fef3c7; color: #78350f; }
+    .amber-body { background: #fffbeb; }
+    .amber-card { background: #fff; border-color: #fde68a; color: #1c1917; }
+
+    .slate-hdr  { background: #f1f5f9; color: #1e293b; }
+    .slate-body { background: #f8fafc; }
+    .slate-card { background: #fff; border-color: #e2e8f0; color: #1c1917; }
+
+    /* ── Backdrop ── */
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(28, 25, 23, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 50;
+    }
+
+    /* ── Modal ── */
+    .modal {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.12);
+      width: 100%;
+      max-width: 520px;
+      overflow: hidden;
+      position: relative;
+      animation: popIn 0.15s ease-out;
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.96) translateY(6px); }
+      to   { opacity: 1; transform: scale(1)   translateY(0); }
+    }
+
+    .modal-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid #e7e5e4;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .modal-header-left { flex: 1; min-width: 0; }
+
+    .modal-meta {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .tag-badge {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+      padding: 2px 6px; border-radius: 4px;
+      background: #dbeafe; color: #1d4ed8;
+    }
+
+    .date-pill {
+      font-size: 9px; font-weight: 600; letter-spacing: 0.1em;
+      background: #fff; border: 1px solid #a8a29e;
+      color: #57534e; padding: 2px 6px; border-radius: 3px;
+    }
+
+    .modal-item-title {
+      font-size: 14px; font-weight: 700; color: #1c1917;
+      line-height: 1.35; word-break: break-word;
+    }
+
+    .modal-close {
+      flex-shrink: 0;
+      background: none; border: none; cursor: pointer;
+      color: #a8a29e; padding: 2px;
+      line-height: 1;
+      font-size: 18px;
+      border-radius: 4px;
+      transition: color 0.1s, background 0.1s;
+    }
+    .modal-close:hover { color: #1c1917; background: #f5f5f4; }
+
+    .modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+    .field-label {
+      display: block;
+      font-size: 9px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #a8a29e;
+      margin-bottom: 4px;
+    }
+    .field-label span { text-transform: none; font-weight: 400; opacity: 0.75; letter-spacing: 0; }
+
+    .field-input {
+      width: 100%; font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px; color: #1c1917;
+      border: 1px solid #d6d3d1; border-radius: 5px;
+      padding: 6px 9px; background: #fafaf9;
+      outline: none; transition: border-color 0.1s;
+    }
+    .field-input:focus { border-color: #78716c; background: #fff; }
+    .field-input.active { border-color: #78716c; background: #fff; }
+
+    textarea.field-input { resize: none; line-height: 1.5; }
+
+    .url-row { display: flex; align-items: center; gap: 8px; }
+    .url-badge {
+      flex-shrink: 0; width: 18px; height: 18px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 9px; font-weight: 700;
+    }
+
+    .modal-footer {
+      padding: 10px 20px 14px;
+      border-top: 1px solid #e7e5e4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-row { display: flex; align-items: center; gap: 8px; }
+    .status-label { font-size: 10px; color: #a8a29e; }
+    .status-options { display: flex; gap: 6px; }
+    .status-opt {
+      width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: transform 0.1s;
+    }
+    .status-opt:hover { transform: scale(1.2); }
+    .status-opt.selected { border-color: #1c1917; }
+    .status-none  { border: 2px solid #d6d3d1; background: transparent; }
+    .status-amber { background: #fbbf24; }
+    .status-rose  { background: #f43f5e; }
+    .status-grey  { background: #9ca3af; }
+
+    .delete-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      background: none; border: 1px solid #fca5a5; color: #ef4444;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      transition: background 0.1s;
+    }
+    .delete-btn:hover { background: #fef2f2; }
+
+    /* toggle buttons for the demo */
+    .demo-controls {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 10px; z-index: 100;
+    }
+    .demo-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      background: #1c1917; color: #fff; border: none;
+      padding: 8px 18px; border-radius: 6px; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .demo-btn.secondary {
+      background: #fff; color: #1c1917; border: 1px solid #d6d3d1;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Fake page background ── -->
+<div class="page">
+  <div class="topbar">
+    <div class="topbar-title">My Roadmap</div>
+    <div class="topbar-btn">Share as URL Encoded</div>
+    <div class="topbar-btn">Export CSV</div>
+    <div class="topbar-btn">Backup</div>
+  </div>
+  <div class="heading">2026</div>
+  <div class="grid">
+    <!-- DONE -->
+    <div>
+      <div class="col-header green-hdr"><h2>DONE</h2><p>Released stuff... already LIVE!</p></div>
+      <div class="col-body green-body">
+        <div class="team-label">SEEKER TEAM</div>
+        <div class="card green-card"><span class="card-text">Onboarding v2 launch</span><span class="dot dot-grey"></span></div>
+        <div class="card green-card"><span class="tag-badge">FR</span><span class="card-text">Localisation rollout</span><span class="dot dot-grey"></span></div>
+      </div>
+    </div>
+    <!-- COMING SOON -->
+    <div>
+      <div class="col-header blue-hdr"><h2>COMING SOON</h2><p>Q2 2026</p></div>
+      <div class="col-body blue-body">
+        <div class="team-label">SEEKER TEAM</div>
+        <div class="card blue-card" id="trigger-card" onclick="openModal()" style="outline: 2px solid #3b82f6; cursor:pointer;">
+          <span class="tag-badge">DE</span>
+          <span class="card-text">Job alert improvements <span style="font-size:9px;background:#fff;border:1px solid #a8a29e;color:#57534e;padding:1px 5px;border-radius:3px;margin-left:4px;">Q2 2026</span></span>
+          <span style="width:6px;height:6px;border-radius:50%;background:#9ca3af;flex-shrink:0;" title="Has notes"></span>
+          <span class="dot dot-amber"></span>
+        </div>
+        <div class="card blue-card"><span class="card-text">Profile completeness nudge</span><span class="dot dot-grey"></span></div>
+      </div>
+    </div>
+    <!-- AFTER THAT -->
+    <div>
+      <div class="col-header amber-hdr"><h2>AFTER THAT</h2><p>Q3 2026</p></div>
+      <div class="col-body amber-body">
+        <div class="team-label">SEEKER TEAM</div>
+        <div class="card amber-card"><span class="card-text">Saved search redesign</span><span class="dot dot-grey"></span></div>
+      </div>
+    </div>
+    <!-- FUTURE -->
+    <div>
+      <div class="col-header slate-hdr"><h2>FUTURE</h2><p>Beyond the next 6 months</p></div>
+      <div class="col-body slate-body">
+        <div class="team-label">SEEKER TEAM</div>
+        <div class="card slate-card"><span class="card-text">AI-powered recommendations</span><span class="dot dot-rose"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Backdrop + Modal ── -->
+<div class="backdrop" id="backdrop" onclick="handleBackdropClick(event)" style="display:none;">
+  <div class="modal" id="modal">
+
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <div class="modal-meta">
+          <span class="tag-badge">DE</span>
+          <span class="date-pill">Q2 2026</span>
+        </div>
+        <div class="modal-item-title">Job alert improvements</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()" title="Close">&#x2715;</button>
+    </div>
+
+    <div class="modal-body">
+      <div>
+        <label class="field-label">
+          Title <span>— prefix with country code to set tag, e.g. DE: name</span>
+        </label>
+        <input class="field-input active" type="text" value="DE: Job alert improvements" />
+      </div>
+
+      <div>
+        <label class="field-label">Notes</label>
+        <textarea class="field-input" rows="8" placeholder="Add a description or comment…">Improve frequency controls and relevance scoring for job alerts. Need to align with the recommendations team on signal weighting.</textarea>
+      </div>
+
+      <div class="url-row">
+        <span class="url-badge" style="background:#0052CC;">J</span>
+        <input class="field-input" type="url" placeholder="JIRA ticket URL…" value="https://jira.example.com/browse/SEEK-1234" style="flex:1;" />
+      </div>
+
+      <div class="url-row">
+        <span class="url-badge" style="background:#0065FF;">C</span>
+        <input class="field-input" type="url" placeholder="Confluence page URL…" style="flex:1;" />
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <div class="status-row">
+        <span class="status-label">Status</span>
+        <div class="status-options">
+          <div class="status-opt status-none"  title="No flag"></div>
+          <div class="status-opt status-amber selected" title="At risk"></div>
+          <div class="status-opt status-rose"  title="Blocked"></div>
+          <div class="status-opt status-grey"  title="Deprioritised"></div>
+        </div>
+      </div>
+      <button class="delete-btn">Delete item</button>
+    </div>
+
+  </div>
+</div>
+
+<div class="demo-controls">
+  <button class="demo-btn" onclick="openModal()">Open modal (click item above too)</button>
+  <button class="demo-btn secondary" onclick="closeModal()">Close modal</button>
+</div>
+
+<script>
+  function openModal() {
+    document.getElementById('backdrop').style.display = 'flex';
+  }
+  function closeModal() {
+    document.getElementById('backdrop').style.display = 'none';
+  }
+  function handleBackdropClick(e) {
+    if (e.target === document.getElementById('backdrop')) closeModal();
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+</script>
+</body>
+</html>

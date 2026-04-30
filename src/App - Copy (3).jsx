@@ -190,7 +190,7 @@ const columnStyles = {
   green: {
     header: "bg-emerald-400", headerText: "text-emerald-950",
     body: "bg-emerald-50", section: "bg-emerald-100",
-    item: "bg-white border-emerald-200 hover:border-emerald-400",
+    item: "bg-emerald-50 border-emerald-200 hover:border-emerald-400",
     addBtn: "bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-300",
   },
   blue: {
@@ -220,10 +220,9 @@ const columnStyles = {
 };
 
 const flagStyles = {
-  warning:   "bg-amber-200 border-amber-400",
-  risk:      "bg-rose-200 border-rose-400",
-  completed: "bg-emerald-100 border-emerald-400",
-  done:      "bg-gray-300 border-gray-400 line-through text-gray-600",
+  risk: "bg-rose-200 border-rose-400",
+  warning: "bg-amber-200 border-amber-400",
+  done: "bg-gray-300 border-gray-400 line-through text-gray-600",
   null: "",
 };
 
@@ -430,13 +429,6 @@ export default function RoadmapTracker() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!expandedItem) return;
-    const handler = (e) => { if (e.key === "Escape") setExpandedItem(null); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [expandedItem]);
-
   // Save to localStorage on change
   const saveData = (newData) => {
     setData(newData);
@@ -589,7 +581,7 @@ export default function RoadmapTracker() {
   };
 
   const cycleFlag = (id) => {
-    const flagCycle = [null, "warning", "risk", "completed", "done"];
+    const flagCycle = [null, "risk", "warning", "done"];
     const newItems = data.items.map((i) => {
       if (i.id === id) {
         const currentIdx = flagCycle.indexOf(i.flag);
@@ -1023,17 +1015,18 @@ export default function RoadmapTracker() {
                             return (
                               <div
                                 key={item.id}
-                                draggable={!isPreview}
-                                onDragStart={!isPreview ? () => handleDragStart(item) : undefined}
+                                draggable={!isPreview && !isExpanded}
+                                onDragStart={!isPreview && !isExpanded ? () => handleDragStart(item) : undefined}
                                 onDragOver={!isPreview ? (e) => handleDragOverItem(e, item) : undefined}
                                 onDrop={!isPreview ? (e) => handleDrop(e, item) : undefined}
                                 onDragEnd={!isPreview ? handleDragEnd : undefined}
-                                onClick={() => setExpandedItem(item.id)}
+                                onClick={() => setExpandedItem(isExpanded ? null : item.id)}
                                 className={`
                                   group relative rounded-md border px-2 py-1.5 text-xs transition-all cursor-pointer
                                   ${item.flag ? flagClass : styles.item}
                                   ${isDragOver ? "ring-2 ring-stone-800 translate-y-0.5" : ""}
                                   ${dragItem?.id === item.id ? "opacity-40" : ""}
+                                  ${isExpanded ? "ring-1 ring-stone-400 shadow-sm" : ""}
                                 `}
                               >
                                 {/* Collapsed header row */}
@@ -1085,13 +1078,12 @@ export default function RoadmapTracker() {
                                   <button
                                     onClick={!isPreview ? (e) => { e.stopPropagation(); cycleFlag(item.id); } : (e) => e.stopPropagation()}
                                     className={`flex-shrink-0 transition-opacity ${!isPreview ? "opacity-60 hover:opacity-100" : "opacity-40 cursor-default"}`}
-                                    title={!isPreview ? "Click to cycle status: on track → at risk → blocked → done → deprioritised" : undefined}
+                                    title={!isPreview ? "Click to cycle status: none → at risk → warning → deprioritised" : undefined}
                                   >
                                     <Circle className={`w-3 h-3 ${
-                                      item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                                      item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                                      item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                                      item.flag === "done"      ? "fill-gray-400 text-gray-400" :
+                                      item.flag === "risk" ? "fill-rose-500 text-rose-500" :
+                                      item.flag === "warning" ? "fill-amber-400 text-amber-400" :
+                                      item.flag === "done" ? "fill-gray-400 text-gray-400" :
                                       "text-stone-300"
                                     }`} />
                                   </button>
@@ -1106,6 +1098,102 @@ export default function RoadmapTracker() {
                                   )}
                                 </div>
 
+                                {/* Expanded panel */}
+                                {isExpanded && (
+                                  <div
+                                    className="mt-2 pt-2 border-t border-stone-200 space-y-2"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {!isPreview ? (
+                                      <>
+                                        <div>
+                                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-0.5">
+                                            Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            defaultValue={item.tag ? `${item.tag}: ${item.text}` : item.text}
+                                            autoFocus
+                                            onBlur={(e) => {
+                                              const { tag, text } = extractTag(e.target.value.trim());
+                                              updateItem(item.id, { tag: tag || null, text: text || e.target.value.trim() });
+                                            }}
+                                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); }}
+                                            className="w-full text-xs border border-stone-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-stone-500"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-0.5">Notes</label>
+                                          <textarea
+                                            defaultValue={item.description || ""}
+                                            onBlur={(e) => updateItem(item.id, { description: e.target.value.trim() || null })}
+                                            placeholder="Add a description or comment…"
+                                            rows={3}
+                                            className="w-full text-xs border border-stone-300 rounded px-1.5 py-1 bg-white resize-none focus:outline-none focus:border-stone-500"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0052CC" }}>J</span>
+                                            <input
+                                              type="url"
+                                              defaultValue={item.jiraUrl || ""}
+                                              onBlur={(e) => updateItem(item.id, { jiraUrl: e.target.value.trim() || null })}
+                                              placeholder="JIRA issue URL"
+                                              className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-stone-500 min-w-0"
+                                            />
+                                            {item.jiraUrl && (
+                                              <a href={item.jiraUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex-shrink-0 text-stone-400 hover:text-stone-700">
+                                                <ExternalLink className="w-3 h-3" />
+                                              </a>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0065FF" }}>C</span>
+                                            <input
+                                              type="url"
+                                              defaultValue={item.confluenceUrl || ""}
+                                              onBlur={(e) => updateItem(item.id, { confluenceUrl: e.target.value.trim() || null })}
+                                              placeholder="Confluence page URL"
+                                              className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-stone-500 min-w-0"
+                                            />
+                                            {item.confluenceUrl && (
+                                              <a href={item.confluenceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex-shrink-0 text-stone-400 hover:text-stone-700">
+                                                <ExternalLink className="w-3 h-3" />
+                                              </a>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      /* Preview mode: read-only */
+                                      <>
+                                        {item.description && (
+                                          <p className="text-xs text-stone-600 leading-relaxed whitespace-pre-wrap">{item.description}</p>
+                                        )}
+                                        <div className="flex flex-wrap gap-2">
+                                          {item.jiraUrl && (
+                                            <a href={item.jiraUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                                               className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#0052CC" }}>
+                                              <span className="w-3.5 h-3.5 rounded flex items-center justify-center text-white font-bold text-[7px]" style={{ backgroundColor: "#0052CC" }}>J</span>
+                                              JIRA <ExternalLink className="w-2.5 h-2.5" />
+                                            </a>
+                                          )}
+                                          {item.confluenceUrl && (
+                                            <a href={item.confluenceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                                               className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#0065FF" }}>
+                                              <span className="w-3.5 h-3.5 rounded flex items-center justify-center text-white font-bold text-[7px]" style={{ backgroundColor: "#0065FF" }}>C</span>
+                                              Confluence <ExternalLink className="w-2.5 h-2.5" />
+                                            </a>
+                                          )}
+                                          {!item.description && !item.jiraUrl && !item.confluenceUrl && (
+                                            <span className="text-[10px] text-stone-400 italic">No notes or links added</span>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -1188,172 +1276,9 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v1.3.0</span>
+          <span className="ml-auto opacity-40">v1.2.0</span>
         </div>
       </div>
-
-      {/* Item modal */}
-      {expandedItem && (() => {
-        const modalItem = displayData.items.find((i) => i.id === expandedItem);
-        if (!modalItem) return null;
-        const { date, cleanText } = extractDate(modalItem.text);
-        return (
-          <div
-            className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-6 z-50"
-            onClick={() => setExpandedItem(null)}
-          >
-            <div
-              className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal header */}
-              <div className="px-5 py-4 border-b border-stone-100 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    {modalItem.tag && (
-                      <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(modalItem.tag)}`}>
-                        {modalItem.tag}
-                      </span>
-                    )}
-                    {date && (
-                      <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm">
-                        {date}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm font-bold text-stone-900 leading-snug">{cleanText}</div>
-                </div>
-                <button
-                  onClick={() => setExpandedItem(null)}
-                  className="flex-shrink-0 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded p-1 transition-colors"
-                  title="Close"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Modal body */}
-              <div className="px-5 py-4 space-y-4">
-                {!isPreview ? (
-                  <>
-                    <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
-                        Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue={modalItem.tag ? `${modalItem.tag}: ${modalItem.text}` : modalItem.text}
-                        autoFocus
-                        onBlur={(e) => {
-                          const { tag, text } = extractTag(e.target.value.trim());
-                          updateItem(modalItem.id, { tag: tag || null, text: text || e.target.value.trim() });
-                        }}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-                        className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Notes</label>
-                      <textarea
-                        defaultValue={modalItem.description || ""}
-                        onBlur={(e) => updateItem(modalItem.id, { description: e.target.value.trim() || null })}
-                        placeholder="Add a description or comment…"
-                        rows={8}
-                        className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white resize-none focus:outline-none focus:border-stone-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0052CC" }}>J</span>
-                        <input
-                          type="url"
-                          defaultValue={modalItem.jiraUrl || ""}
-                          onBlur={(e) => updateItem(modalItem.id, { jiraUrl: e.target.value.trim() || null })}
-                          placeholder="JIRA issue URL"
-                          className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
-                        />
-                        {modalItem.jiraUrl && (
-                          <a href={modalItem.jiraUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0065FF" }}>C</span>
-                        <input
-                          type="url"
-                          defaultValue={modalItem.confluenceUrl || ""}
-                          onBlur={(e) => updateItem(modalItem.id, { confluenceUrl: e.target.value.trim() || null })}
-                          placeholder="Confluence page URL"
-                          className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
-                        />
-                        {modalItem.confluenceUrl && (
-                          <a href={modalItem.confluenceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {modalItem.description && (
-                      <p className="text-xs text-stone-600 leading-relaxed whitespace-pre-wrap">{modalItem.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {modalItem.jiraUrl && (
-                        <a href={modalItem.jiraUrl} target="_blank" rel="noopener noreferrer"
-                           className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#0052CC" }}>
-                          <span className="w-3.5 h-3.5 rounded flex items-center justify-center text-white font-bold text-[7px]" style={{ backgroundColor: "#0052CC" }}>J</span>
-                          JIRA <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                      {modalItem.confluenceUrl && (
-                        <a href={modalItem.confluenceUrl} target="_blank" rel="noopener noreferrer"
-                           className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#0065FF" }}>
-                          <span className="w-3.5 h-3.5 rounded flex items-center justify-center text-white font-bold text-[7px]" style={{ backgroundColor: "#0065FF" }}>C</span>
-                          Confluence <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                      {!modalItem.description && !modalItem.jiraUrl && !modalItem.confluenceUrl && (
-                        <span className="text-[10px] text-stone-400 italic">No notes or links added</span>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Modal footer */}
-              {!isPreview && (
-                <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-stone-400">Status</span>
-                    <button
-                      onClick={() => cycleFlag(modalItem.id)}
-                      className="flex items-center gap-1.5 text-[10px] font-mono text-stone-500 hover:text-stone-800 transition-colors"
-                    >
-                      <Circle className={`w-3.5 h-3.5 ${
-                        modalItem.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                        modalItem.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                        modalItem.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                        modalItem.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                        "text-stone-300"
-                      }`} />
-                      {modalItem.flag === "risk" ? "Blocked" : modalItem.flag === "warning" ? "At risk" : modalItem.flag === "completed" ? "Done" : modalItem.flag === "done" ? "Deprioritised" : "On track"}
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => { deleteItem(modalItem.id); setExpandedItem(null); }}
-                    className="text-[10px] font-mono text-stone-400 hover:text-rose-600 uppercase tracking-wider border border-stone-200 hover:border-rose-300 px-2.5 py-1 rounded transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
