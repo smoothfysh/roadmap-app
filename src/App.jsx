@@ -189,7 +189,7 @@ function extractDate(text) {
 const columnStyles = {
   green: {
     header: "bg-emerald-400", headerText: "text-emerald-950",
-    body: "bg-emerald-50", section: "bg-emerald-100",
+    body: "bg-emerald-50", section: "bg-emerald-300",
     item: "bg-white border-emerald-200 hover:border-emerald-400",
     addBtn: "bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-300",
   },
