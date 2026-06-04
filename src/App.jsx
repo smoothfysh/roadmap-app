@@ -1307,7 +1307,9 @@ export default function RoadmapTracker() {
                   </div>
                   {STRATEGIC_CATEGORIES.map((cat, catIdx) => {
                     const isLastCat = catIdx === 3;
-                    const cellItems = displayData.items.filter((i) => i.teamId === team.id && i.strategicCategory === cat.id);
+                    const cellItems = displayData.items
+                      .filter((i) => i.teamId === team.id && i.strategicCategory === cat.id)
+                      .sort((a, b) => displayData.columns.findIndex((c) => c.id === b.columnId) - displayData.columns.findIndex((c) => c.id === a.columnId));
                     return (
                       <div
                         key={cat.id}
