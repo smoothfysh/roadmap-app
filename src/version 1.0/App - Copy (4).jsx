@@ -70,7 +70,6 @@ function csvToItems(csvText) {
       description: obj.description || null,
       jiraUrl: obj.jiraUrl || null,
       confluenceUrl: obj.confluenceUrl || null,
-      strategicCategory: obj.strategicCategory || null,
     };
   });
 }
@@ -86,7 +85,7 @@ function itemsToCsv(items) {
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -155,14 +154,6 @@ async function decodeShareData(str) {
 
 // ---------- Status history helpers ----------
 const FLAG_LABELS = { warning: "At Risk", risk: "Blocked", completed: "Done", done: "Deprioritised" };
-
-// ---------- Strategic view categories ----------
-const STRATEGIC_CATEGORIES = [
-  { id: "do-or-die",        label: "Do or Die",            image: "/animal-dino.png",    headerBg: "bg-pink-300",   headerText: "text-pink-950",   bodyBg: "bg-pink-50"   },
-  { id: "stay-relevant",    label: "Stay Relevant",        image: "/animal-bird.png",    headerBg: "bg-yellow-300", headerText: "text-yellow-950", bodyBg: "bg-yellow-50" },
-  { id: "beat-competition", label: "Beat the Competition", image: "/animal-lion.png",    headerBg: "bg-sky-300",    headerText: "text-sky-950",    bodyBg: "bg-sky-50"    },
-  { id: "disrupt",          label: "Disrupt",              image: "/animal-unicorn.png", headerBg: "bg-violet-300", headerText: "text-violet-950", bodyBg: "bg-violet-50" },
-];
 
 const STATUS_OPTIONS = [
   { flag: null,        label: "On Track",     dot: "text-stone-300" },
@@ -306,7 +297,6 @@ export default function RoadmapTracker() {
   const [expandedItem, setExpandedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
   const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
-  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic"
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -955,23 +945,6 @@ export default function RoadmapTracker() {
           </div>
         </div>
 
-        {/* View tabs */}
-        <div className="max-w-[1800px] mx-auto flex gap-1 border-b border-stone-200 mb-6">
-          {[{ id: "roadmap", label: "Roadmap View" }, { id: "strategic", label: "Strategic View" }].map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setActiveView(id)}
-              className={`text-xs font-mono font-semibold uppercase tracking-wider px-4 py-2 rounded-t-md border border-b-0 transition-colors -mb-px ${
-                activeView === id
-                  ? "bg-stone-50 border-stone-200 text-stone-900"
-                  : "text-stone-400 border-transparent hover:text-stone-700 hover:bg-stone-100"
-              }`}
-            >{label}</button>
-          ))}
-        </div>
-
-        {/* Roadmap view */}
-        {activeView === "roadmap" && <>
         {/* Columns */}
         <div className="max-w-[1800px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {displayData.columns.map((col) => {
@@ -1267,134 +1240,8 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v2.0.0</span>
+          <span className="ml-auto opacity-40">v1.3.0</span>
         </div>
-        </>}
-
-        {/* Strategic view */}
-        {activeView === "strategic" && (
-          <div className="max-w-[1800px] mx-auto">
-            {/* Animal images row */}
-            <div style={{ display: "grid", gridTemplateColumns: "180px repeat(4, 1fr)", gap: "12px", alignItems: "flex-end" }}>
-              <div />
-              {STRATEGIC_CATEGORIES.map((cat) => (
-                <div key={cat.id} className="flex justify-center items-end" style={{ height: "120px" }}>
-                  <img src={cat.image} alt={cat.label} style={{ height: "110px", width: "auto", objectFit: "contain" }} />
-                </div>
-              ))}
-            </div>
-
-            {/* Category header row */}
-            <div style={{ display: "grid", gridTemplateColumns: "180px repeat(4, 1fr)" }}>
-              <div />
-              {STRATEGIC_CATEGORIES.map((cat, i) => (
-                <div
-                  key={cat.id}
-                  className={`${cat.headerBg} ${cat.headerText} px-4 py-3 text-center font-bold text-sm tracking-wide uppercase ${i === 0 ? "rounded-tl-lg" : ""} ${i === 3 ? "rounded-tr-lg" : ""}`}
-                >
-                  "{cat.label}"
-                </div>
-              ))}
-            </div>
-
-            {/* Team swim lane rows */}
-            {displayData.teams.map((team, teamIdx) => {
-              const isLastTeam = teamIdx === displayData.teams.length - 1;
-              return (
-                <div key={team.id} style={{ display: "grid", gridTemplateColumns: "180px repeat(4, 1fr)" }}>
-                  <div className={`bg-stone-200 border border-stone-300 border-t-0 flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center ${isLastTeam ? "rounded-bl-lg" : ""}`}>
-                    {team.name}
-                  </div>
-                  {STRATEGIC_CATEGORIES.map((cat, catIdx) => {
-                    const isLastCat = catIdx === 3;
-                    const cellItems = displayData.items.filter((i) => i.teamId === team.id && i.strategicCategory === cat.id);
-                    return (
-                      <div
-                        key={cat.id}
-                        className={`${cat.bodyBg} border border-stone-200 border-t-0 border-l-0 p-2 min-h-[100px] ${isLastTeam && isLastCat ? "rounded-br-lg" : ""}`}
-                      >
-                        {cellItems.length === 0 ? (
-                          <div className="text-[10px] text-stone-300 italic text-center pt-6">—</div>
-                        ) : (
-                          cellItems.map((item) => {
-                            const col = displayData.columns.find((c) => c.id === item.columnId);
-                            const { cleanText } = extractDate(item.text);
-                            const flagClass = flagStyles[item.flag] || "";
-                            return (
-                              <div
-                                key={item.id}
-                                onClick={() => setExpandedItem(item.id)}
-                                className={`rounded-md border px-2 py-1.5 text-xs mb-1.5 last:mb-0 cursor-pointer transition-all hover:shadow-sm ${item.flag ? flagClass : "bg-white border-stone-200 hover:border-stone-400"}`}
-                              >
-                                <div className="flex items-start gap-1.5">
-                                  {item.tag && (
-                                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>
-                                  )}
-                                  <span className="flex-1 leading-snug">{cleanText}</span>
-                                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${
-                                    item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                                    item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                                    item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                                    item.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                                    "text-stone-200"
-                                  }`} />
-                                </div>
-                                {col && (
-                                  <div className="mt-1">
-                                    <span className="inline-flex font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-300 text-stone-600 px-1.5 py-0.5 rounded-sm">
-                                      {col.subtitle || col.title}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-
-            {/* Unassigned items */}
-            {(() => {
-              const unassigned = displayData.items.filter((i) => !i.strategicCategory);
-              if (unassigned.length === 0) return null;
-              return (
-                <div className="mt-6 border border-dashed border-stone-300 rounded-lg p-4 bg-white">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-stone-400 mb-3">
-                    Unassigned — {unassigned.length} item{unassigned.length !== 1 ? "s" : ""} not yet categorised
-                    {!isPreview && <span className="normal-case opacity-70"> · click an item to open it and assign a strategic category</span>}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {unassigned.map((item) => {
-                      const { cleanText } = extractDate(item.text);
-                      const col = displayData.columns.find((c) => c.id === item.columnId);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => setExpandedItem(item.id)}
-                          className="cursor-pointer bg-stone-50 border border-stone-200 hover:border-stone-400 rounded-md px-2.5 py-1.5 text-xs flex items-center gap-1.5 transition-colors"
-                        >
-                          {item.tag && <span className={`font-bold text-[10px] px-1 py-0.5 rounded ${getTagStyle(item.tag)}`}>{item.tag}</span>}
-                          <span>{cleanText}</span>
-                          {col && <span className="font-mono text-[9px] text-stone-400 bg-white border border-stone-200 px-1 py-0.5 rounded">{col.subtitle || col.title}</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Strategic footer */}
-            <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
-              {!isPreview && <span><span className="font-bold">Click</span> any item to open it and assign a strategic category</span>}
-              <span className="ml-auto opacity-40">v1.3.0</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Item modal */}
@@ -1456,22 +1303,6 @@ export default function RoadmapTracker() {
                         onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
                         className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500"
                       />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Strategic Category</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          onClick={() => updateItem(modalItem.id, { strategicCategory: null })}
-                          className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${!modalItem.strategicCategory ? "border-stone-400 bg-stone-100 font-bold text-stone-900" : "border-stone-200 text-stone-400 hover:border-stone-400 hover:text-stone-700"}`}
-                        >None</button>
-                        {STRATEGIC_CATEGORIES.map((cat) => (
-                          <button
-                            key={cat.id}
-                            onClick={() => updateItem(modalItem.id, { strategicCategory: cat.id })}
-                            className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${modalItem.strategicCategory === cat.id ? `${cat.headerBg} ${cat.headerText} border-transparent font-bold` : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"}`}
-                          >"{cat.label}"</button>
-                        ))}
-                      </div>
                     </div>
                     <div>
                       <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Notes</label>
