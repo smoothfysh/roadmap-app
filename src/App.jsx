@@ -152,6 +152,29 @@ async function decodeShareData(str) {
   }
 }
 
+// ---------- Status history helpers ----------
+const FLAG_LABELS = { warning: "At Risk", risk: "Blocked", completed: "Done", done: "Deprioritised" };
+const FLAG_COLORS = {
+  warning:   "text-amber-600",
+  risk:      "text-rose-600",
+  completed: "text-emerald-600",
+  done:      "text-stone-400",
+};
+
+function formatHistoryDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1)  return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24)  return `${diffHrs}h ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays < 7)  return `${diffDays}d ago`;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
+}
+
 // ---------- Date extraction ----------
 // Pull a date-ish token out of the text for display as a pill.
 // Handles: "15 FEB", "05 JAN", "31 MAR", "Mid APR", "End of JUNE",
@@ -593,8 +616,9 @@ export default function RoadmapTracker() {
     const flagCycle = [null, "warning", "risk", "completed", "done"];
     const newItems = data.items.map((i) => {
       if (i.id === id) {
-        const currentIdx = flagCycle.indexOf(i.flag);
-        return { ...i, flag: flagCycle[(currentIdx + 1) % flagCycle.length] };
+        const newFlag = flagCycle[(flagCycle.indexOf(i.flag) + 1) % flagCycle.length];
+        const entry = { flag: newFlag, at: Date.now() };
+        return { ...i, flag: newFlag, statusHistory: [...(i.statusHistory || []), entry] };
       }
       return i;
     });
@@ -1323,6 +1347,26 @@ export default function RoadmapTracker() {
                   </>
                 )}
               </div>
+
+              {/* Status history */}
+              {modalItem.statusHistory?.length > 0 && (
+                <div className="px-5 pb-4">
+                  <div className="border-t border-stone-100 pt-3">
+                    <div className="text-[9px] font-mono uppercase tracking-wider text-stone-400 mb-2">Status history</div>
+                    <div className="space-y-1.5">
+                      {[...modalItem.statusHistory].reverse().slice(0, 8).map((entry, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${entry.flag ? `fill-current ${FLAG_COLORS[entry.flag]}` : "text-stone-300"}`} />
+                          <span className={`text-[11px] font-mono font-semibold flex-shrink-0 ${entry.flag ? FLAG_COLORS[entry.flag] : "text-stone-400"}`}>
+                            {FLAG_LABELS[entry.flag] || "On Track"}
+                          </span>
+                          <span className="text-[10px] text-stone-400 ml-auto flex-shrink-0">{formatHistoryDate(entry.at)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Modal footer */}
               {!isPreview && (
