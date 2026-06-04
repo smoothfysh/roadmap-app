@@ -154,6 +154,14 @@ async function decodeShareData(str) {
 
 // ---------- Status history helpers ----------
 const FLAG_LABELS = { warning: "At Risk", risk: "Blocked", completed: "Done", done: "Deprioritised" };
+
+const STATUS_OPTIONS = [
+  { flag: null,        label: "On Track",     dot: "text-stone-300" },
+  { flag: "warning",   label: "At Risk",      dot: "fill-amber-400 text-amber-400" },
+  { flag: "risk",      label: "Blocked",      dot: "fill-rose-500 text-rose-500" },
+  { flag: "completed", label: "Done",         dot: "fill-emerald-500 text-emerald-500" },
+  { flag: "done",      label: "Deprioritised",dot: "fill-gray-400 text-gray-400" },
+];
 const FLAG_COLORS = {
   warning:   "text-amber-600",
   risk:      "text-rose-600",
@@ -288,6 +296,7 @@ export default function RoadmapTracker() {
   const [newItemText, setNewItemText] = useState("");
   const [expandedItem, setExpandedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
+  const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -612,11 +621,10 @@ export default function RoadmapTracker() {
     saveData({ ...data, items: data.items.filter((i) => i.id !== id) });
   };
 
-  const cycleFlag = (id) => {
-    const flagCycle = [null, "warning", "risk", "completed", "done"];
+  const setFlag = (id, newFlag) => {
     const newItems = data.items.map((i) => {
       if (i.id === id) {
-        const newFlag = flagCycle[(flagCycle.indexOf(i.flag) + 1) % flagCycle.length];
+        if (i.flag === newFlag) return i;
         const entry = { flag: newFlag, at: Date.now() };
         return { ...i, flag: newFlag, statusHistory: [...(i.statusHistory || []), entry] };
       }
@@ -1107,19 +1115,38 @@ export default function RoadmapTracker() {
                                       title={`Confluence: ${item.confluenceUrl}`}
                                     >C</a>
                                   )}
-                                  <button
-                                    onClick={!isPreview ? (e) => { e.stopPropagation(); cycleFlag(item.id); } : (e) => e.stopPropagation()}
-                                    className={`flex-shrink-0 transition-opacity ${!isPreview ? "opacity-60 hover:opacity-100" : "opacity-40 cursor-default"}`}
-                                    title={!isPreview ? "Click to cycle status: on track → at risk → blocked → done → deprioritised" : undefined}
-                                  >
-                                    <Circle className={`w-3 h-3 ${
-                                      item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                                      item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                                      item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                                      item.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                                      "text-stone-300"
-                                    }`} />
-                                  </button>
+                                  <div className="relative flex-shrink-0">
+                                    <button
+                                      onClick={!isPreview ? (e) => { e.stopPropagation(); setFlagPickerOpen(flagPickerOpen === item.id ? null : item.id); } : (e) => e.stopPropagation()}
+                                      className={`flex-shrink-0 transition-opacity ${!isPreview ? "opacity-60 hover:opacity-100" : "opacity-40 cursor-default"}`}
+                                      title={!isPreview ? "Set status" : undefined}
+                                    >
+                                      <Circle className={`w-3 h-3 ${
+                                        item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
+                                        item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
+                                        item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
+                                        item.flag === "done"      ? "fill-gray-400 text-gray-400" :
+                                        "text-stone-300"
+                                      }`} />
+                                    </button>
+                                    {flagPickerOpen === item.id && (
+                                      <>
+                                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setFlagPickerOpen(null); }} />
+                                        <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-stone-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
+                                          {STATUS_OPTIONS.map((opt) => (
+                                            <button
+                                              key={String(opt.flag)}
+                                              onClick={(e) => { e.stopPropagation(); setFlag(item.id, opt.flag); setFlagPickerOpen(null); }}
+                                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono hover:bg-stone-50 transition-colors ${item.flag === opt.flag ? "bg-stone-50 font-bold" : ""}`}
+                                            >
+                                              <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
+                                              {opt.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
                                   {!isPreview && (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: item.id, text: item.text }); }}
@@ -1370,22 +1397,23 @@ export default function RoadmapTracker() {
 
               {/* Modal footer */}
               {!isPreview && (
-                <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-stone-400">Status</span>
-                    <button
-                      onClick={() => cycleFlag(modalItem.id)}
-                      className="flex items-center gap-1.5 text-[10px] font-mono text-stone-500 hover:text-stone-800 transition-colors"
-                    >
-                      <Circle className={`w-3.5 h-3.5 ${
-                        modalItem.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                        modalItem.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                        modalItem.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                        modalItem.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                        "text-stone-300"
-                      }`} />
-                      {modalItem.flag === "risk" ? "Blocked" : modalItem.flag === "warning" ? "At risk" : modalItem.flag === "completed" ? "Done" : modalItem.flag === "done" ? "Deprioritised" : "On track"}
-                    </button>
+                <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-mono text-stone-400 mr-1">Status</span>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <button
+                        key={String(opt.flag)}
+                        onClick={() => setFlag(modalItem.id, opt.flag)}
+                        className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border transition-colors ${
+                          modalItem.flag === opt.flag
+                            ? "border-stone-400 bg-stone-100 font-bold text-stone-900"
+                            : "border-stone-200 text-stone-500 hover:border-stone-400 hover:bg-stone-50"
+                        }`}
+                      >
+                        <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                   <button
                     onClick={() => setDeleteConfirm({ id: modalItem.id, text: modalItem.text })}
