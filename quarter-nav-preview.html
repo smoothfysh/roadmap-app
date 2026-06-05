@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quarter Navigator — Style Options</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; padding: 32px 24px; }
+
+    h1 { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #a8a29e; margin-bottom: 32px; }
+
+    .option-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+
+    .option { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .option-label { font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #a8a29e; align-self: flex-start; }
+
+    /* ── Option A: Dark pill ── */
+    .nav-a {
+      display: flex; align-items: center; gap: 0;
+      background: #1c1917; border-radius: 999px;
+      padding: 0; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .nav-a button {
+      background: none; border: none; cursor: pointer;
+      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+      color: #a8a29e; transition: color 0.15s, background 0.15s;
+      font-size: 18px;
+    }
+    .nav-a button:hover { color: #fff; background: rgba(255,255,255,0.1); }
+    .nav-a button:disabled { color: #44403c; cursor: not-allowed; }
+    .nav-a span {
+      font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.05em;
+      padding: 0 20px; white-space: nowrap;
+    }
+
+    /* ── Option B: Bordered card with accent top ── */
+    .nav-b {
+      display: flex; align-items: center; gap: 10px;
+      background: #fff;
+      border: 2px solid #1c1917;
+      border-radius: 10px;
+      padding: 10px 16px;
+      box-shadow: 3px 3px 0px #1c1917;
+    }
+    .nav-b button {
+      background: none; border: none; cursor: pointer;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      color: #1c1917; border: 1.5px solid #1c1917; border-radius: 5px;
+      font-size: 16px; transition: background 0.1s;
+    }
+    .nav-b button:hover { background: #1c1917; color: #fff; }
+    .nav-b button:disabled { color: #d6d3d1; border-color: #d6d3d1; cursor: not-allowed; }
+    .nav-b button:disabled:hover { background: none; color: #d6d3d1; }
+    .nav-b span { font-size: 15px; font-weight: 800; color: #1c1917; letter-spacing: 0.03em; padding: 0 8px; }
+
+    /* ── Option C: Colored band (uses app's stone palette) ── */
+    .nav-c-wrap {
+      width: 100%;
+      background: #292524;
+      border-radius: 10px;
+      padding: 14px 20px;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .nav-c-eyebrow { font-size: 8px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #78716c; }
+    .nav-c {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .nav-c button {
+      background: #3c3836; border: none; cursor: pointer;
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #d6d3d1; font-size: 18px; transition: background 0.15s, color 0.15s;
+    }
+    .nav-c button:hover { background: #57534e; color: #fff; }
+    .nav-c button:disabled { color: #44403c; cursor: not-allowed; }
+    .nav-c span { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: 0.03em; min-width: 120px; text-align: center; }
+
+    /* ── Option D: Amber accent ── */
+    .nav-d-wrap {
+      display: flex; align-items: center; gap: 0;
+      border: 2px solid #f59e0b; border-radius: 10px; overflow: hidden;
+      background: #fff;
+    }
+    .nav-d-btn {
+      background: #fef3c7; border: none; cursor: pointer;
+      width: 44px; height: 48px;
+      display: flex; align-items: center; justify-content: center;
+      color: #92400e; font-size: 20px; transition: background 0.15s;
+    }
+    .nav-d-btn:hover { background: #fde68a; }
+    .nav-d-btn:disabled { color: #fcd34d; cursor: not-allowed; }
+    .nav-d-center {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      padding: 8px 20px; border-left: 2px solid #f59e0b; border-right: 2px solid #f59e0b;
+    }
+    .nav-d-eyebrow { font-size: 8px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #d97706; }
+    .nav-d-label { font-size: 15px; font-weight: 800; color: #1c1917; }
+
+    /* ── Option E: Indigo gradient pill ── */
+    .nav-e {
+      display: flex; align-items: center; gap: 0;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      border-radius: 999px; overflow: hidden;
+      padding: 0;
+      box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+    }
+    .nav-e button {
+      background: none; border: none; cursor: pointer;
+      width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.6); font-size: 20px; transition: color 0.15s, background 0.15s;
+    }
+    .nav-e button:hover { color: #fff; background: rgba(255,255,255,0.12); }
+    .nav-e button:disabled { color: rgba(255,255,255,0.2); cursor: not-allowed; }
+    .nav-e span { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.05em; padding: 0 18px; white-space: nowrap; }
+
+    /* ── Option F: Underline/minimal bold ── */
+    .nav-f {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .nav-f button {
+      background: none; border: none; cursor: pointer;
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 1.5px solid #d6d3d1;
+      display: flex; align-items: center; justify-content: center;
+      color: #57534e; font-size: 16px; transition: all 0.15s;
+    }
+    .nav-f button:hover { border-color: #1c1917; color: #1c1917; background: #f5f5f4; }
+    .nav-f button:disabled { color: #e7e5e4; border-color: #e7e5e4; cursor: not-allowed; }
+    .nav-f-label { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .nav-f-eyebrow { font-size: 8px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #a8a29e; }
+    .nav-f-main { font-size: 20px; font-weight: 900; color: #1c1917; letter-spacing: -0.02em; border-bottom: 3px solid #1c1917; padding-bottom: 1px; }
+
+    /* context block */
+    .context { margin-top: 8px; width: 100%; background: #f5f5f4; border-radius: 6px; padding: 10px 12px; }
+    .context-title { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a8a29e; margin-bottom: 6px; }
+    .tile-row { display: flex; gap: 6px; }
+    .mini-tile { flex: 1; background: #fff; border: 1px solid #e7e5e4; border-radius: 6px; padding: 6px 8px; }
+    .mini-val { font-size: 14px; font-weight: 800; color: #1c1917; }
+    .mini-lbl { font-size: 8px; color: #a8a29e; margin-top: 1px; }
+  </style>
+</head>
+<body>
+
+<h1>Quarter navigator — style options (click to see interactive state)</h1>
+
+<div class="option-grid">
+
+  <!-- A: Dark pill -->
+  <div class="option">
+    <div class="option-label">A — Dark pill</div>
+    <div class="nav-a">
+      <button onclick="prev('a')" id="btn-a-prev">‹</button>
+      <span id="label-a">Q2 2026</span>
+      <button onclick="next('a')" id="btn-a-next">›</button>
+    </div>
+    <div class="context">
+      <div class="context-title">Summary tiles below</div>
+      <div class="tile-row">
+        <div class="mini-tile"><div class="mini-val">€1.8M</div><div class="mini-lbl">Uplift</div></div>
+        <div class="mini-tile"><div class="mini-val">3</div><div class="mini-lbl">Contributors</div></div>
+        <div class="mini-tile"><div class="mini-val">2</div><div class="mini-lbl">Enablers</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B: Bordered card with hard shadow -->
+  <div class="option">
+    <div class="option-label">B — Hard shadow card</div>
+    <div class="nav-b">
+      <button onclick="prev('b')" id="btn-b-prev">‹</button>
+      <span id="label-b">Q2 2026</span>
+      <button onclick="next('b')" id="btn-b-next">›</button>
+    </div>
+    <div class="context">
+      <div class="context-title">Summary tiles below</div>
+      <div class="tile-row">
+        <div class="mini-tile"><div class="mini-val">€1.8M</div><div class="mini-lbl">Uplift</div></div>
+        <div class="mini-tile"><div class="mini-val">3</div><div class="mini-lbl">Contributors</div></div>
+        <div class="mini-tile"><div class="mini-val">2</div><div class="mini-lbl">Enablers</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C: Dark band with eyebrow -->
+  <div class="option">
+    <div class="option-label">C — Dark band + eyebrow</div>
+    <div class="nav-c-wrap">
+      <div class="nav-c-eyebrow">Viewing quarter</div>
+      <div class="nav-c">
+        <button onclick="prev('c')" id="btn-c-prev">‹</button>
+        <span id="label-c">Q2 2026</span>
+        <button onclick="next('c')" id="btn-c-next">›</button>
+      </div>
+    </div>
+    <div class="context">
+      <div class="context-title">Summary tiles below</div>
+      <div class="tile-row">
+        <div class="mini-tile"><div class="mini-val">€1.8M</div><div class="mini-lbl">Uplift</div></div>
+        <div class="mini-tile"><div class="mini-val">3</div><div class="mini-lbl">Contributors</div></div>
+        <div class="mini-tile"><div class="mini-val">2</div><div class="mini-lbl">Enablers</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D: Amber accent -->
+  <div class="option">
+    <div class="option-label">D — Amber accent</div>
+    <div class="nav-d-wrap">
+      <button class="nav-d-btn" onclick="prev('d')" id="btn-d-prev">‹</button>
+      <div class="nav-d-center">
+        <div class="nav-d-eyebrow">Quarter</div>
+        <div class="nav-d-label" id="label-d">Q2 2026</div>
+      </div>
+      <button class="nav-d-btn" onclick="next('d')" id="btn-d-next">›</button>
+    </div>
+    <div class="context">
+      <div class="context-title">Summary tiles below</div>
+      <div class="tile-row">
+        <div class="mini-tile"><div class="mini-val">€1.8M</div><div class="mini-lbl">Uplift</div></div>
+        <div class="mini-tile"><div class="mini-val">3</div><div class="mini-lbl">Contributors</div></div>
+        <div class="mini-tile"><div class="mini-val">2</div><div class="mini-lbl">Enablers</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- E: Indigo gradient pill -->
+  <div class="option">
+    <div class="option-label">E — Indigo gradient pill</div>
+    <div class="nav-e">
+      <button onclick="prev('e')" id="btn-e-prev">‹</button>
+      <span id="label-e">Q2 2026</span>
+      <button onclick="next('e')" id="btn-e-next">›</button>
+    </div>
+    <div class="context">
+      <div class="context-title">Summary tiles below</div>
+      <div class="tile-row">
+        <div class="mini-tile"><div class="mini-val">€1.8M</div><div class="mini-lbl">Uplift</div></div>
+        <div class="mini-tile"><div class="mini-val">3</div><div class="mini-lbl">Contributors</div></div>
+        <div class="mini-tile"><div class="mini-val">2</div><div class="mini-lbl">Enablers</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- F: Underline bold + eyebrow -->
+  <div class="option">
+    <div class="option-label">F — Bold underline + eyebrow</div>
+    <div class="nav-f">
+      <button onclick="prev('f')" id="btn-f-prev">‹</button>
+      <div class="nav-f-label">
+        <div class="nav-f-eyebrow">Viewing quarter</div>
+        <div class="nav-f-main" id="label-f">Q2 2026</div>
+      </div>
+      <button onclick="next('f')" id="btn-f-next">›</button>
+    </div>
+    <div class="context">
+      <div class="context-title">Summary tiles below</div>
+      <div class="tile-row">
+        <div class="mini-tile"><div class="mini-val">€1.8M</div><div class="mini-lbl">Uplift</div></div>
+        <div class="mini-tile"><div class="mini-val">3</div><div class="mini-lbl">Contributors</div></div>
+        <div class="mini-tile"><div class="mini-val">2</div><div class="mini-lbl">Enablers</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const quarters = ["LIVE / DONE", "Q2 2026", "Q3 2026", "Future"];
+  const idxState = { a: 1, b: 1, c: 1, d: 1, e: 1, f: 1 };
+
+  function update(id) {
+    const i = idxState[id];
+    document.getElementById('label-' + id).textContent = quarters[i];
+    document.getElementById('btn-' + id + '-prev').disabled = i === 0;
+    document.getElementById('btn-' + id + '-next').disabled = i === quarters.length - 1;
+  }
+  function prev(id) { if (idxState[id] > 0) { idxState[id]--; update(id); } }
+  function next(id) { if (idxState[id] < quarters.length - 1) { idxState[id]++; update(id); } }
+
+  ['a','b','c','d','e','f'].forEach(update);
+</script>
+</body>
+</html>

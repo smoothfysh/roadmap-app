@@ -1523,24 +1523,26 @@ export default function RoadmapTracker() {
           return (
             <div className="max-w-[1800px] mx-auto">
               {/* Quarter navigator */}
-              <div className="flex items-center justify-center gap-3 mb-6">
-                <button
-                  onClick={() => setRevenueColIdx((i) => Math.max(0, i - 1))}
-                  disabled={safeIdx === 0}
-                  className="w-8 h-8 flex items-center justify-center rounded-full border border-stone-300 text-stone-600 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="font-mono font-bold text-xl tracking-tight text-stone-900 min-w-[140px] text-center">
-                  {selectedCol.subtitle || selectedCol.title}
-                </span>
-                <button
-                  onClick={() => setRevenueColIdx((i) => Math.min(displayData.columns.length - 1, i + 1))}
-                  disabled={safeIdx === displayData.columns.length - 1}
-                  className="w-8 h-8 flex items-center justify-center rounded-full border border-stone-300 text-stone-600 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+              <div className="flex items-center justify-center mb-6">
+                <div className="flex items-center gap-3 bg-white border-2 border-stone-900 rounded-xl px-4 py-2.5" style={{ boxShadow: "3px 3px 0px #1c1917" }}>
+                  <button
+                    onClick={() => setRevenueColIdx((i) => Math.max(0, i - 1))}
+                    disabled={safeIdx === 0}
+                    className="w-7 h-7 flex items-center justify-center border-[1.5px] border-stone-900 rounded-md text-stone-900 hover:bg-stone-900 hover:text-white disabled:border-stone-300 disabled:text-stone-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="font-mono font-extrabold text-base tracking-tight text-stone-900 min-w-[140px] text-center select-none">
+                    {selectedCol.subtitle || selectedCol.title}
+                  </span>
+                  <button
+                    onClick={() => setRevenueColIdx((i) => Math.min(displayData.columns.length - 1, i + 1))}
+                    disabled={safeIdx === displayData.columns.length - 1}
+                    className="w-7 h-7 flex items-center justify-center border-[1.5px] border-stone-900 rounded-md text-stone-900 hover:bg-stone-900 hover:text-white disabled:border-stone-300 disabled:text-stone-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Summary tiles */}
