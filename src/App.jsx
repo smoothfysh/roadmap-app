@@ -71,6 +71,11 @@ function csvToItems(csvText) {
       jiraUrl: obj.jiraUrl || null,
       confluenceUrl: obj.confluenceUrl || null,
       strategicCategory: obj.strategicCategory || null,
+      revenueType:       obj.revenueType || null,
+      revenueUplift:     obj.revenueUplift ? Number(obj.revenueUplift) : null,
+      revenueStream:     obj.revenueStream || null,
+      enablerNote:       obj.enablerNote || null,
+      enables:           (() => { try { return obj.enables ? JSON.parse(obj.enables) : null; } catch { return null; } })(),
     };
   });
 }
@@ -82,11 +87,14 @@ function itemsToCsv(items) {
     if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
-  const rows = items.map((i) => headers.map((h) => escape(i[h])).join(","));
+  const rows = items.map((i) => headers.map((h) => {
+    if (h === "enables") return escape(i.enables?.length > 0 ? JSON.stringify(i.enables) : null);
+    return escape(i[h]);
+  }).join(","));
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -155,6 +163,30 @@ async function decodeShareData(str) {
 
 // ---------- Status history helpers ----------
 const FLAG_LABELS = { warning: "At Risk", risk: "Blocked", completed: "Done", done: "Deprioritised" };
+
+// ---------- Revenue helpers ----------
+function formatUplift(val) {
+  if (val == null) return null;
+  if (val >= 1_000_000) return `€${parseFloat((val / 1_000_000).toFixed(1))}M`;
+  if (val >= 1_000)     return `€${Math.round(val / 1_000)}K`;
+  return `€${val}`;
+}
+
+function getRevenueTier(uplift) {
+  if (uplift == null)          return null;
+  if (uplift >= 1_000_000)     return "purple";
+  if (uplift >= 500_000)       return "green";
+  if (uplift >= 100_000)       return "blue";
+  return "amber";
+}
+
+const REVENUE_TIERS = [
+  { id: "purple", label: "€1M+",        sub: "Top-tier bets",      headerBg: "bg-violet-500", headerText: "text-white",        bodyBg: "bg-violet-50",  valueColor: "text-violet-600" },
+  { id: "green",  label: "€500K–€999K", sub: "Solid contributors", headerBg: "bg-green-700",  headerText: "text-white",        bodyBg: "bg-green-50",   valueColor: "text-green-700"  },
+  { id: "blue",   label: "€100K–€499K", sub: "Steady wins",        headerBg: "bg-sky-500",    headerText: "text-white",        bodyBg: "bg-sky-50",     valueColor: "text-sky-600"    },
+  { id: "amber",  label: "Under €100K", sub: "Small contributors",  headerBg: "bg-amber-400",  headerText: "text-amber-950",    bodyBg: "bg-amber-50",   valueColor: "text-amber-600"  },
+  { id: "gray",   label: "Enablers",    sub: "Unlock revenue",     headerBg: "bg-stone-300",  headerText: "text-stone-700",    bodyBg: "bg-stone-50",   valueColor: "text-stone-500"  },
+];
 
 // ---------- Strategic view categories ----------
 const STRATEGIC_CATEGORIES = [
@@ -306,7 +338,8 @@ export default function RoadmapTracker() {
   const [expandedItem, setExpandedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
   const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
-  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic"
+  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue"
+  const [modalTab, setModalTab] = useState("details"); // "details" | "revenue"
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -475,6 +508,7 @@ export default function RoadmapTracker() {
 
   useEffect(() => {
     if (!expandedItem) return;
+    setModalTab("details");
     const handler = (e) => { if (e.key === "Escape") setExpandedItem(null); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -957,7 +991,7 @@ export default function RoadmapTracker() {
 
         {/* View tabs */}
         <div className="max-w-[1800px] mx-auto flex gap-1 border-b border-stone-200 mb-6">
-          {[{ id: "roadmap", label: "Roadmap View" }, { id: "strategic", label: "Strategic View" }].map(({ id, label }) => (
+          {[{ id: "roadmap", label: "By Time" }, { id: "strategic", label: "By Innovation Type" }, { id: "revenue", label: "By Revenue Impact" }].map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setActiveView(id)}
@@ -1267,7 +1301,7 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v2.0.0</span>
+          <span className="ml-auto opacity-40">v3.0.0</span>
         </div>
         </>}
 
@@ -1426,6 +1460,155 @@ export default function RoadmapTracker() {
             </div>
           </div>
         )}
+
+        {/* ── Revenue Impact view ── */}
+        {activeView === "revenue" && (() => {
+          const directItems   = displayData.items.filter((i) => i.revenueType === "direct");
+          const enablerItems  = displayData.items.filter((i) => i.revenueType === "enabler");
+          const estimated     = directItems.filter((i) => i.revenueUplift != null);
+          const needsEstimate = directItems.filter((i) => i.revenueUplift == null);
+          const totalUplift   = estimated.reduce((s, i) => s + i.revenueUplift, 0);
+          const doneColId     = displayData.columns[0]?.id;
+
+          const itemsForCell = (teamId, tierId) => {
+            if (tierId === "gray")
+              return enablerItems.filter((i) => i.teamId === teamId);
+            return estimated.filter((i) => i.teamId === teamId && getRevenueTier(i.revenueUplift) === tierId)
+              .sort((a, b) => b.revenueUplift - a.revenueUplift);
+          };
+
+          const RevCard = ({ item, tier }) => {
+            const { cleanText } = extractDate(item.text);
+            const flagClass = flagStyles[item.flag] || "";
+            if (tier.id === "gray") {
+              const enabledStreams = [...new Set((item.enables || [])
+                .map((id) => displayData.items.find((i) => i.id === id)?.revenueStream).filter(Boolean))];
+              return (
+                <div onClick={() => setExpandedItem(item.id)}
+                  className="rounded-lg border border-dashed border-stone-300 bg-white px-2.5 py-2 mb-1.5 last:mb-0 cursor-pointer hover:shadow-sm transition-all">
+                  {enabledStreams.length > 0 && (
+                    <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-1">
+                      Enables: {enabledStreams.join(", ")}
+                    </div>
+                  )}
+                  <div className="text-xs font-semibold text-stone-700 leading-snug mb-1">
+                    {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded mr-1 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
+                    {cleanText}
+                  </div>
+                  {item.enablerNote && <div className="text-[10px] text-stone-400 italic leading-snug">{item.enablerNote}</div>}
+                </div>
+              );
+            }
+            return (
+              <div onClick={() => setExpandedItem(item.id)}
+                className={`rounded-md border px-2.5 py-2 mb-1.5 last:mb-0 cursor-pointer hover:shadow-sm transition-all ${item.flag ? flagClass : "bg-white border-stone-200 hover:border-stone-400"}`}>
+                <div className="flex items-start gap-1.5 mb-1">
+                  {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
+                  <span className="flex-1 text-xs font-semibold leading-snug text-stone-800">{cleanText}</span>
+                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
+                </div>
+                <div className="flex items-center gap-2">
+                  {item.revenueStream && <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400">{item.revenueStream}</span>}
+                  <span className={`text-[10px] font-bold ml-auto ${tier.valueColor}`}>{formatUplift(item.revenueUplift)}</span>
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div className="max-w-[1800px] mx-auto">
+              {/* Summary tiles */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+                {[
+                  { label: "Total Est. Uplift",  value: formatUplift(totalUplift) || "€0",  sub: `${estimated.length} estimated item${estimated.length !== 1 ? "s" : ""}`, accent: false },
+                  { label: "Contributors",        value: directItems.length,                  sub: "direct revenue items",                                                      accent: false },
+                  { label: "Enablers",            value: enablerItems.length,                 sub: "items unlocking revenue",                                                   accent: false },
+                  { label: "Needs Estimate",      value: needsEstimate.length,                sub: "hidden from this view",                                                     accent: needsEstimate.length > 0 },
+                ].map(({ label, value, sub, accent }) => (
+                  <div key={label} className={`bg-white border rounded-xl px-5 py-4 ${accent ? "border-amber-300" : "border-stone-200"}`}>
+                    <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-2">{label}</div>
+                    <div className={`text-3xl font-black tracking-tight leading-none ${accent ? "text-amber-500" : "text-stone-900"}`}>{value}</div>
+                    <div className={`text-[10px] mt-1 ${accent ? "text-amber-400" : "text-stone-400"}`}>{sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mobile: stacked tiers */}
+              <div className="md:hidden space-y-4">
+                {REVENUE_TIERS.map((tier) => {
+                  const tierItems = tier.id === "gray"
+                    ? enablerItems
+                    : estimated.filter((i) => getRevenueTier(i.revenueUplift) === tier.id)
+                        .sort((a, b) => b.revenueUplift - a.revenueUplift);
+                  return (
+                    <div key={tier.id} className={`rounded-xl overflow-hidden border ${tier.id === "gray" ? "border-dashed border-stone-300" : "border-stone-200"}`}>
+                      <div className={`${tier.headerBg} ${tier.headerText} flex items-center gap-3 px-4 py-3`}>
+                        <span className="font-bold text-sm uppercase tracking-wide">{tier.label}</span>
+                        <span className="text-xs opacity-75">— {tier.sub}</span>
+                      </div>
+                      <div className={`${tier.bodyBg} p-3 space-y-3`}>
+                        {tierItems.length === 0 ? (
+                          <div className="text-[10px] text-stone-300 italic text-center py-3">No items</div>
+                        ) : (
+                          displayData.teams.map((team) => {
+                            const teamItems = itemsForCell(team.id, tier.id);
+                            if (teamItems.length === 0) return null;
+                            return (
+                              <div key={team.id}>
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">{team.name}</div>
+                                {teamItems.map((item) => <RevCard key={item.id} item={item} tier={tier} />)}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop: grid */}
+              <div className="hidden md:block">
+                {/* Header row */}
+                <div style={{ display: "grid", gridTemplateColumns: "140px repeat(5, 1fr)" }}>
+                  <div />
+                  {REVENUE_TIERS.map((tier, i) => (
+                    <div key={tier.id} className={`${tier.headerBg} ${tier.headerText} px-3 py-3 text-center ${i === 0 ? "rounded-tl-lg" : ""} ${i === 4 ? "rounded-tr-lg border border-dashed border-stone-400 border-b-0" : ""}`}>
+                      <div className="font-bold text-xs tracking-wide uppercase">{tier.label}</div>
+                      <div className="text-[9px] opacity-75 mt-0.5">{tier.sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Team swim lane rows */}
+                {displayData.teams.map((team) => (
+                  <div key={team.id} style={{ display: "grid", gridTemplateColumns: "140px repeat(5, 1fr)", marginTop: "10px" }}>
+                    <div className="bg-stone-200 border border-stone-300 rounded-l-lg flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center">
+                      {team.name}
+                    </div>
+                    {REVENUE_TIERS.map((tier, catIdx) => {
+                      const cellItems = itemsForCell(team.id, tier.id);
+                      const isLast = catIdx === 4;
+                      return (
+                        <div key={tier.id} className={`${tier.bodyBg} border border-stone-200 border-l-0 p-2 min-h-[90px] ${isLast ? "rounded-r-lg border-dashed border-stone-300" : ""}`}>
+                          {cellItems.length === 0
+                            ? <div className="text-[10px] text-stone-300 italic text-center pt-6">—</div>
+                            : cellItems.map((item) => <RevCard key={item.id} item={item} tier={tier} />)
+                          }
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
+                {!isPreview && <span><span className="font-bold">Click</span> any item to open it and set revenue type, uplift and stream</span>}
+                <span className="ml-auto opacity-40">v1.3.0</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Item modal */}
@@ -1468,7 +1651,20 @@ export default function RoadmapTracker() {
                 </button>
               </div>
 
-              {/* Modal body */}
+              {/* Modal inner tabs */}
+              {!isPreview && (
+                <div className="flex border-b border-stone-100">
+                  {[{ id: "details", label: "Details" }, { id: "revenue", label: "Revenue" }].map(({ id, label }) => (
+                    <button key={id} onClick={() => setModalTab(id)}
+                      className={`text-[10px] font-mono font-semibold uppercase tracking-wider px-5 py-2.5 border-b-2 transition-colors ${modalTab === id ? "border-stone-700 text-stone-900" : "border-transparent text-stone-400 hover:text-stone-700"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Modal body — Details tab */}
+              {(isPreview || modalTab === "details") && (
               <div className="px-5 py-4 space-y-4">
                 {!isPreview ? (
                   <>
@@ -1574,6 +1770,109 @@ export default function RoadmapTracker() {
                   </>
                 )}
               </div>
+              )}{/* end details tab */}
+
+              {/* Modal body — Revenue tab */}
+              {!isPreview && modalTab === "revenue" && (() => {
+                const doneColId = displayData.columns[0]?.id;
+                const directNotDone = displayData.items.filter((i) =>
+                  i.revenueType === "direct" && i.columnId !== doneColId && i.id !== modalItem.id
+                );
+                const usedStreams = [...new Set(displayData.items.map((i) => i.revenueStream).filter(Boolean))];
+                return (
+                  <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                    {/* Revenue type */}
+                    <div>
+                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Revenue Type</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {[{ val: null, label: "None" }, { val: "direct", label: "Direct Contributor" }, { val: "enabler", label: "Enabler" }].map(({ val, label }) => (
+                          <button key={String(val)} onClick={() => updateItem(modalItem.id, { revenueType: val })}
+                            className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
+                              modalItem.revenueType === val
+                                ? val === "direct"  ? "border-green-600 bg-green-50 text-green-800 font-bold"
+                                : val === "enabler" ? "border-violet-500 bg-violet-50 text-violet-800 font-bold"
+                                :                    "border-stone-400 bg-stone-100 text-stone-900 font-bold"
+                                : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
+                            }`}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Uplift — direct only */}
+                    {modalItem.revenueType === "direct" && (
+                      <div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Uplift (€)</label>
+                        <input type="number" key={modalItem.id + "-uplift"}
+                          defaultValue={modalItem.revenueUplift ?? ""}
+                          onBlur={(e) => updateItem(modalItem.id, { revenueUplift: e.target.value ? Number(e.target.value) : null })}
+                          placeholder="e.g. 1800000"
+                          className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                        {modalItem.revenueUplift && (
+                          <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.revenueUplift)} — determines which tier column this item appears in</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Stream — direct only */}
+                    {modalItem.revenueType === "direct" && (
+                      <div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Stream</label>
+                        <input type="text" list="stream-datalist" key={modalItem.id + "-stream"}
+                          defaultValue={modalItem.revenueStream ?? ""}
+                          onBlur={(e) => updateItem(modalItem.id, { revenueStream: e.target.value.trim() || null })}
+                          placeholder="e.g. SCHUFA, Financing leads, Onsite ads…"
+                          className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                        <datalist id="stream-datalist">
+                          {usedStreams.map((s) => <option key={s} value={s} />)}
+                        </datalist>
+                      </div>
+                    )}
+
+                    {/* Enabler note — enabler only */}
+                    {modalItem.revenueType === "enabler" && (
+                      <div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Enabler Note</label>
+                        <input type="text" key={modalItem.id + "-note"}
+                          defaultValue={modalItem.enablerNote ?? ""}
+                          onBlur={(e) => updateItem(modalItem.id, { enablerNote: e.target.value.trim() || null })}
+                          placeholder="What does this unlock and why does it matter?"
+                          className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                      </div>
+                    )}
+
+                    {/* Enables checklist — enabler only */}
+                    {modalItem.revenueType === "enabler" && (
+                      <div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">
+                          Enables <span className="normal-case opacity-60">— direct contributors not yet done</span>
+                        </label>
+                        {directNotDone.length === 0 ? (
+                          <div className="text-[10px] text-stone-400 italic">No direct contributors to link yet — mark other items as Direct Contributor first</div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {directNotDone.map((item) => {
+                              const { cleanText } = extractDate(item.text);
+                              const col = displayData.columns.find((c) => c.id === item.columnId);
+                              const checked = (modalItem.enables || []).includes(item.id);
+                              return (
+                                <label key={item.id} className="flex items-center gap-2 cursor-pointer group">
+                                  <input type="checkbox" checked={checked} onChange={(e) => {
+                                    const current = modalItem.enables || [];
+                                    const updated = e.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id);
+                                    updateItem(modalItem.id, { enables: updated.length > 0 ? updated : null });
+                                  }} className="rounded" />
+                                  <span className="text-xs text-stone-700 group-hover:text-stone-900 flex-1 leading-snug">{cleanText}</span>
+                                  {col && <span className="text-[9px] text-stone-400 font-mono flex-shrink-0">{col.subtitle || col.title}</span>}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Status history */}
               {modalItem.statusHistory?.length > 0 && (

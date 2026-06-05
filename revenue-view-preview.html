@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revenue Impact View — Mockup v2</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; min-height: 100vh; }
+
+    /* ── Top bar ── */
+    .topbar { background: #e7e5e4; border-bottom: 1px solid #d6d3d1; padding: 10px 24px; display: flex; align-items: center; gap: 12px; }
+    .topbar-title { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #57534e; }
+    .topbar-btn { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid #d6d3d1; background: #fff; color: #57534e; padding: 4px 10px; border-radius: 4px; margin-left: auto; }
+    .topbar-btn + .topbar-btn { margin-left: 6px; }
+
+    /* ── Page heading ── */
+    .page-heading { padding: 16px 24px 0; display: flex; align-items: center; gap: 12px; }
+    .year { font-size: 36px; font-weight: 900; letter-spacing: -0.02em; color: #1c1917; }
+
+    /* ── Tabs ── */
+    .tabs { padding: 12px 24px 0; display: flex; gap: 2px; border-bottom: 2px solid #e7e5e4; }
+    .tab { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 7px 16px; border-radius: 6px 6px 0 0; cursor: pointer; border: 1px solid transparent; border-bottom: none; color: #78716c; margin-bottom: -2px; }
+    .tab.active { color: #1c1917; background: #fafaf9; border-color: #e7e5e4; border-bottom-color: #fafaf9; }
+
+    /* ── Content ── */
+    .content { padding: 24px; }
+
+    /* ── Summary tiles ── */
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; max-width: 1400px; }
+    .metric-tile { background: #fff; border: 1px solid #e7e5e4; border-radius: 10px; padding: 16px 20px; }
+    .metric-label { font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #a8a29e; margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 900; letter-spacing: -0.02em; color: #1c1917; line-height: 1; }
+    .metric-sub { font-size: 10px; color: #a8a29e; margin-top: 4px; }
+
+    /* ── Revenue grid ── */
+    .rev-wrapper { max-width: 1400px; }
+
+    /* Animal / icon row */
+    .icon-row {
+      display: grid;
+      grid-template-columns: 140px repeat(5, 1fr);
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 0;
+    }
+    .icon-cell { display: flex; justify-content: center; align-items: flex-end; height: 64px; }
+    .tier-icon { font-size: 36px; line-height: 1; }
+
+    /* Column headers */
+    .col-header-row { display: grid; grid-template-columns: 140px repeat(5, 1fr); }
+    .col-header { padding: 10px 12px; text-align: center; }
+    .col-header-title { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+    .col-header-sub { font-size: 9px; font-weight: 600; opacity: 0.75; margin-top: 2px; letter-spacing: 0.05em; }
+
+    /* Tier colours */
+    .hdr-purple { background: #7F77DD; color: #fff; border-radius: 8px 0 0 0; }
+    .hdr-green  { background: #639922; color: #fff; }
+    .hdr-blue   { background: #378ADD; color: #fff; }
+    .hdr-amber  { background: #EF9F27; color: #fff; }
+    .hdr-gray   { background: #d6d3d1; color: #57534e; border-radius: 0 8px 0 0; border: 1px dashed #a8a29e; border-bottom: none; }
+
+    .body-purple { background: #f5f3ff; }
+    .body-green  { background: #f0fdf4; }
+    .body-blue   { background: #eff6ff; }
+    .body-amber  { background: #fffbeb; }
+    .body-gray   { background: #fafaf9; border: 1px dashed #d6d3d1; border-top: none; }
+
+    /* Team swim lane rows */
+    .swimlane-row { display: grid; grid-template-columns: 140px repeat(5, 1fr); margin-top: 10px; }
+    .team-label {
+      background: #e7e5e4; border: 1px solid #d6d3d1;
+      border-radius: 8px 0 0 8px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 10px 8px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; text-align: center; color: #1c1917;
+    }
+    .lane-cell {
+      border: 1px solid rgba(0,0,0,0.08); border-left: none;
+      padding: 8px; min-height: 90px;
+    }
+    .lane-cell:last-child { border-radius: 0 8px 8px 0; }
+    .lane-cell.gray-cell { border-style: dashed; border-color: #d6d3d1; }
+
+    /* Item cards */
+    .rev-card {
+      border-radius: 6px; border: 1px solid rgba(0,0,0,0.1);
+      padding: 7px 9px; font-size: 11px; margin-bottom: 6px; background: #fff;
+      cursor: pointer; transition: box-shadow 0.15s;
+    }
+    .rev-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .rev-card:last-child { margin-bottom: 0; }
+    .rev-card-top { display: flex; align-items: flex-start; gap: 5px; margin-bottom: 4px; }
+    .rev-card-name { flex: 1; line-height: 1.35; font-weight: 600; color: #1c1917; }
+    .rev-card-bottom { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .stream-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a8a29e; }
+    .uplift-badge { font-size: 10px; font-weight: 700; margin-left: auto; white-space: nowrap; }
+    .up-purple { color: #7F77DD; }
+    .up-green  { color: #639922; }
+    .up-blue   { color: #378ADD; }
+    .up-amber  { color: #EF9F27; }
+
+    /* Enabler card (gray column) */
+    .enabler-card {
+      border-radius: 6px; border: 1px dashed #d6d3d1;
+      padding: 7px 9px; font-size: 11px; margin-bottom: 6px; background: #fff;
+      cursor: pointer; transition: box-shadow 0.15s;
+    }
+    .enabler-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .enabler-card:last-child { margin-bottom: 0; }
+    .enables-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a8a29e; margin-bottom: 3px; }
+    .enabler-name  { font-size: 11px; font-weight: 600; color: #57534e; line-height: 1.3; margin-bottom: 3px; }
+    .enabler-note  { font-size: 10px; color: #a8a29e; font-style: italic; line-height: 1.35; }
+
+    .empty-cell { font-size: 10px; color: #d6d3d1; font-style: italic; text-align: center; padding: 16px 4px; }
+
+    .tag-de { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: #fbbf24; color: #000; flex-shrink: 0; }
+    .tag-fr { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: #dc2626; color: #fff; flex-shrink: 0; }
+
+    /* ── Modal ── */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(28,25,23,0.5); align-items: center; justify-content: center; z-index: 50; padding: 24px; }
+    .modal-backdrop.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 12px; width: 100%; max-width: 500px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+
+    /* Modal header */
+    .modal-hdr { padding: 16px 20px 12px; border-bottom: 1px solid #f0f0ef; display: flex; align-items: flex-start; justify-content: space-between; }
+    .modal-hdr-inner { flex: 1; }
+    .modal-item-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .modal-item-title { font-size: 14px; font-weight: 700; color: #1c1917; line-height: 1.3; }
+    .modal-close { background: none; border: none; font-size: 18px; color: #a8a29e; cursor: pointer; }
+
+    /* Modal inner tabs */
+    .modal-tabs { display: flex; border-bottom: 1px solid #e7e5e4; padding: 0 20px; }
+    .modal-tab { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent; color: #a8a29e; margin-bottom: -1px; }
+    .modal-tab.active { color: #1c1917; border-bottom-color: #1c1917; }
+
+    /* Modal body */
+    .modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; max-height: 60vh; overflow-y: auto; }
+    .modal-panel { display: none; }
+    .modal-panel.active { display: flex; flex-direction: column; gap: 14px; }
+
+    .field-label { font-size: 9px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #a8a29e; display: block; margin-bottom: 5px; }
+    .field-input { width: 100%; font-family: 'IBM Plex Mono', monospace; font-size: 12px; border: 1px solid #d6d3d1; border-radius: 5px; padding: 6px 10px; background: #fafaf9; color: #1c1917; outline: none; }
+    .field-hint { font-size: 9px; color: #a8a29e; margin-top: 3px; }
+    .field-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .type-btn { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; padding: 5px 12px; border-radius: 5px; border: 1px solid #e7e5e4; color: #57534e; background: #fff; cursor: pointer; }
+    .type-btn.sel-none    { border-color: #a8a29e; background: #f5f5f4; color: #1c1917; font-weight: 700; }
+    .type-btn.sel-direct  { border-color: #639922; background: #f0fdf4; color: #166534; font-weight: 700; }
+    .type-btn.sel-enabler { border-color: #7F77DD; background: #f5f3ff; color: #4c1d95; font-weight: 700; }
+    .enables-list { display: flex; flex-direction: column; gap: 5px; }
+    .enables-list label { font-size: 11px; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #57534e; }
+  </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="topbar-title">My Roadmap</div>
+  <div class="topbar-btn">Share as URL Encoded</div>
+  <div class="topbar-btn">Export CSV</div>
+  <div class="topbar-btn">Backup</div>
+</div>
+
+<!-- Heading -->
+<div class="page-heading">
+  <div class="year">2026</div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <span style="width:14px;height:14px;border-radius:50%;background:#10b981;display:inline-block"></span>
+    <span style="width:14px;height:14px;border-radius:50%;background:#fbbf24;display:inline-block"></span>
+    <span style="width:14px;height:14px;border-radius:50%;background:#f43f5e;display:inline-block"></span>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab">Roadmap View</div>
+  <div class="tab">Strategic View</div>
+  <div class="tab active">By Revenue Impact</div>
+</div>
+
+<div class="content">
+
+  <!-- Summary tiles -->
+  <div class="summary-grid">
+    <div class="metric-tile">
+      <div class="metric-label">Total Est. Uplift</div>
+      <div class="metric-value">€3.0M</div>
+      <div class="metric-sub">5 estimated items</div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Contributors</div>
+      <div class="metric-value">5</div>
+      <div class="metric-sub">direct revenue items</div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Enablers</div>
+      <div class="metric-value">3</div>
+      <div class="metric-sub">items unlocking revenue</div>
+    </div>
+    <div class="metric-tile" style="border-color:#fcd34d;">
+      <div class="metric-label">Needs Estimate</div>
+      <div class="metric-value" style="color:#ef9f27;">2</div>
+      <div class="metric-sub" style="color:#ef9f27;">hidden from this view</div>
+    </div>
+  </div>
+
+  <!-- Revenue grid -->
+  <div class="rev-wrapper">
+
+    <!-- Icon row -->
+    <div class="icon-row">
+      <div></div>
+      <div class="icon-cell"><span class="tier-icon">💜</span></div>
+      <div class="icon-cell"><span class="tier-icon">💚</span></div>
+      <div class="icon-cell"><span class="tier-icon">💙</span></div>
+      <div class="icon-cell"><span class="tier-icon">🟡</span></div>
+      <div class="icon-cell"><span class="tier-icon" style="opacity:0.5">⬜</span></div>
+    </div>
+
+    <!-- Column headers -->
+    <div class="col-header-row">
+      <div></div>
+      <div class="col-header hdr-purple">
+        <div class="col-header-title">€1M+</div>
+        <div class="col-header-sub">Top-tier bets</div>
+      </div>
+      <div class="col-header hdr-green">
+        <div class="col-header-title">€500K–€999K</div>
+        <div class="col-header-sub">Solid contributors</div>
+      </div>
+      <div class="col-header hdr-blue">
+        <div class="col-header-title">€100K–€499K</div>
+        <div class="col-header-sub">Steady wins</div>
+      </div>
+      <div class="col-header hdr-amber">
+        <div class="col-header-title">Under €100K</div>
+        <div class="col-header-sub">Small contributors</div>
+      </div>
+      <div class="col-header hdr-gray">
+        <div class="col-header-title">Enablers</div>
+        <div class="col-header-sub">Unlock revenue</div>
+      </div>
+    </div>
+
+    <!-- ── SEEKER TEAM ── -->
+    <div class="swimlane-row">
+      <div class="team-label">Seeker Team</div>
+
+      <!-- Purple -->
+      <div class="lane-cell body-purple">
+        <div class="rev-card" onclick="openModal('New SCHUFA Funnel')">
+          <div class="rev-card-top">
+            <span class="tag-de">DE</span>
+            <span class="rev-card-name">New SCHUFA Funnel (UI/UX + Payments)</span>
+          </div>
+          <div class="rev-card-bottom">
+            <span class="stream-label">SCHUFA</span>
+            <span class="uplift-badge up-purple">€1.8M</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Green -->
+      <div class="lane-cell body-green">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Blue -->
+      <div class="lane-cell body-blue">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Amber -->
+      <div class="lane-cell body-amber">
+        <div class="rev-card" onclick="openModal('Profile completeness nudge')">
+          <div class="rev-card-top">
+            <span class="rev-card-name">Profile completeness nudge</span>
+          </div>
+          <div class="rev-card-bottom">
+            <span class="stream-label">SCHUFA</span>
+            <span class="uplift-badge up-amber">€45K</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enablers -->
+      <div class="lane-cell body-gray gray-cell">
+        <div class="enabler-card" onclick="openModal('Onboarding v2 launch')">
+          <div class="enables-label">Enables: SCHUFA</div>
+          <div class="enabler-name">Onboarding v2 launch</div>
+          <div class="enabler-note">Gate on ID verification UX for SCHUFA funnel</div>
+        </div>
+        <div class="enabler-card" onclick="openModal('Job alert improvements')">
+          <div class="enables-label">Enables: SCHUFA</div>
+          <div class="enabler-name"><span class="tag-de" style="margin-right:4px">DE</span>Job alert improvements</div>
+          <div class="enabler-note">Higher re-engagement lifts SCHUFA entry rate ~12%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DEMAND TEAM ── -->
+    <div class="swimlane-row">
+      <div class="team-label">Demand Team</div>
+
+      <!-- Purple -->
+      <div class="lane-cell body-purple">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Green -->
+      <div class="lane-cell body-green">
+        <div class="rev-card" onclick="openModal('New Advertising Methods')">
+          <div class="rev-card-top">
+            <span class="rev-card-name">New Advertising Methods (ex. REELS)</span>
+          </div>
+          <div class="rev-card-bottom">
+            <span class="stream-label">Onsite Ads</span>
+            <span class="uplift-badge up-green">€320K</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blue -->
+      <div class="lane-cell body-blue">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Amber -->
+      <div class="lane-cell body-amber">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Enablers -->
+      <div class="lane-cell body-gray gray-cell">
+        <div class="empty-cell">—</div>
+      </div>
+    </div>
+
+    <!-- ── PRODUCT TEAM ── -->
+    <div class="swimlane-row">
+      <div class="team-label">Product Team</div>
+
+      <!-- Purple -->
+      <div class="lane-cell body-purple">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Green -->
+      <div class="lane-cell body-green">
+        <div class="rev-card" onclick="openModal('STORE for Financing leads')">
+          <div class="rev-card-top">
+            <span class="rev-card-name">STORE for Financing leads — Monetized</span>
+          </div>
+          <div class="rev-card-bottom">
+            <span class="stream-label">Financing Leads</span>
+            <span class="uplift-badge up-green">€680K</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blue -->
+      <div class="lane-cell body-blue">
+        <div class="rev-card" onclick="openModal('CS Consulting — brokers')">
+          <div class="rev-card-top">
+            <span class="rev-card-name">Working with financing brokers → CS Consulting</span>
+          </div>
+          <div class="rev-card-bottom">
+            <span class="stream-label">Data Products</span>
+            <span class="uplift-badge up-blue">€150K</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Amber -->
+      <div class="lane-cell body-amber">
+        <div class="empty-cell">—</div>
+      </div>
+
+      <!-- Enablers -->
+      <div class="lane-cell body-gray gray-cell">
+        <div class="enabler-card" onclick="openModal('LeadSmart')">
+          <div class="enables-label">Enables: Financing Leads</div>
+          <div class="enabler-name">LeadSmart — Non-exclusive &amp; un-sold leads</div>
+          <div class="enabler-note">Backend required before STORE monetisation goes live</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /rev-wrapper -->
+</div><!-- /content -->
+
+
+<!-- ══════════════════════════════════
+     ITEM MODAL with tabbed revenue section
+════════════════════════════════════ -->
+<div class="modal-backdrop" id="modal" onclick="handleBackdrop(event)">
+  <div class="modal-box">
+
+    <!-- Header -->
+    <div class="modal-hdr">
+      <div class="modal-hdr-inner">
+        <div class="modal-item-meta">
+          <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#a8a29e">Coming Soon</span>
+          <span style="font-size:9px;background:#fef9c3;border:1px solid #fcd34d;color:#78350f;padding:1px 6px;border-radius:3px;font-weight:600">Q2 2026</span>
+        </div>
+        <div class="modal-item-title" id="modal-title">New SCHUFA Funnel</div>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">✕</button>
+    </div>
+
+    <!-- Inner tabs -->
+    <div class="modal-tabs">
+      <div class="modal-tab active" id="tab-details" onclick="switchModalTab('details')">Details</div>
+      <div class="modal-tab" id="tab-revenue" onclick="switchModalTab('revenue')">Revenue</div>
+    </div>
+
+    <!-- Tab: Details -->
+    <div class="modal-panel active" id="panel-details" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label class="field-label">Title <span style="text-transform:none;font-weight:400;opacity:0.6">— prefix with country code, e.g. DE: name</span></label>
+        <input class="field-input" type="text" value="DE: New SCHUFA Funnel (UI/UX + Payments + ID verification)" />
+      </div>
+      <div>
+        <label class="field-label">Notes</label>
+        <textarea class="field-input" rows="6" style="resize:none">Full redesign of the SCHUFA application flow. Covers new UI/UX, payment integration, and ID verification step.</textarea>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="width:16px;height:16px;border-radius:3px;background:#0052CC;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:700;flex-shrink:0">J</span>
+        <input class="field-input" type="url" placeholder="JIRA issue URL" value="https://jira.example.com/browse/SEEK-1234" />
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="width:16px;height:16px;border-radius:3px;background:#0065FF;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:700;flex-shrink:0">C</span>
+        <input class="field-input" type="url" placeholder="Confluence page URL" />
+      </div>
+      <!-- Status footer -->
+      <div style="border-top:1px solid #f0f0ef;padding-top:12px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:9px;color:#a8a29e;font-weight:600;letter-spacing:0.1em;text-transform:uppercase">Status</span>
+          <span style="font-size:10px;font-weight:600;color:#f43f5e;background:#fff1f2;border:1px solid #fca5a5;padding:2px 8px;border-radius:4px">● Blocked</span>
+        </div>
+        <button style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:#a8a29e;border:1px solid #e7e5e4;padding:3px 10px;border-radius:4px;background:#fff;cursor:pointer">Delete</button>
+      </div>
+    </div>
+
+    <!-- Tab: Revenue -->
+    <div class="modal-panel" id="panel-revenue" style="padding:16px 20px;display:none;flex-direction:column;gap:14px;">
+      <!-- Revenue type -->
+      <div>
+        <label class="field-label">Revenue Type</label>
+        <div class="field-row">
+          <button class="type-btn" id="rbtn-none"    onclick="setRevType('none')">None</button>
+          <button class="type-btn sel-direct" id="rbtn-direct"  onclick="setRevType('direct')">Direct Contributor</button>
+          <button class="type-btn" id="rbtn-enabler" onclick="setRevType('enabler')">Enabler</button>
+        </div>
+      </div>
+      <!-- Uplift (shown for direct) -->
+      <div id="rev-uplift">
+        <label class="field-label">Revenue Uplift (€)</label>
+        <input class="field-input" type="number" placeholder="e.g. 1800000" value="1800000" />
+        <div class="field-hint">Displays as €1.8M · determines which tier column the item appears in</div>
+      </div>
+      <!-- Stream (shown for direct) -->
+      <div id="rev-stream">
+        <label class="field-label">Revenue Stream</label>
+        <input class="field-input" type="text" value="SCHUFA" list="stream-opts" placeholder="e.g. SCHUFA, Financing Leads, Onsite Ads…" />
+        <datalist id="stream-opts">
+          <option value="SCHUFA"></option><option value="Financing Leads"></option>
+          <option value="Onsite Ads"></option><option value="Data Products"></option>
+          <option value="Subscriptions"></option><option value="Cost Reduction"></option>
+        </datalist>
+      </div>
+      <!-- Enabler note (shown for enabler) -->
+      <div id="rev-note" style="display:none">
+        <label class="field-label">Enabler Note</label>
+        <input class="field-input" type="text" placeholder="One line: what does this unlock and why does it matter?" />
+      </div>
+      <!-- Enables (shown for enabler) -->
+      <div id="rev-enables" style="display:none">
+        <label class="field-label">Enables (select items this unlocks)</label>
+        <div class="enables-list">
+          <label><input type="checkbox" checked /> New SCHUFA Funnel — DE · Q2 2026</label>
+          <label><input type="checkbox" /> STORE for Financing leads — Q3 2026</label>
+          <label><input type="checkbox" /> Profile completeness nudge — Q2 2026</label>
+          <label><input type="checkbox" /> New Advertising Methods — Q2 2026</label>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function openModal(name) {
+    document.getElementById('modal-title').textContent = name;
+    switchModalTab('details');
+    document.getElementById('modal').classList.add('open');
+  }
+  function handleBackdrop(e) {
+    if (e.target === document.getElementById('modal'))
+      document.getElementById('modal').classList.remove('open');
+  }
+  document.addEventListener('keydown', e => { if (e.key==='Escape') document.getElementById('modal').classList.remove('open'); });
+
+  function switchModalTab(tab) {
+    ['details','revenue'].forEach(t => {
+      document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+      const p = document.getElementById('panel-'+t);
+      p.style.display = t===tab ? 'flex' : 'none';
+      if (t===tab) p.classList.add('active'); else p.classList.remove('active');
+    });
+  }
+
+  function setRevType(type) {
+    ['none','direct','enabler'].forEach(t => {
+      document.getElementById('rbtn-'+t).className = 'type-btn' + (t===type ? ' sel-'+t : '');
+    });
+    document.getElementById('rev-uplift').style.display  = type==='direct'  ? 'block' : 'none';
+    document.getElementById('rev-stream').style.display  = type==='direct'  ? 'block' : 'none';
+    document.getElementById('rev-note').style.display    = type==='enabler' ? 'block' : 'none';
+    document.getElementById('rev-enables').style.display = type==='enabler' ? 'block' : 'none';
+  }
+</script>
+</body>
+</html>
