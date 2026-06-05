@@ -1274,8 +1274,60 @@ export default function RoadmapTracker() {
         {/* Strategic view */}
         {activeView === "strategic" && (
           <div className="max-w-[1800px] mx-auto">
+            {/* ── Mobile layout: stacked per category ── */}
+            <div className="md:hidden space-y-4">
+              {STRATEGIC_CATEGORIES.map((cat) => {
+                const catItems = displayData.items.filter((i) => i.strategicCategory === cat.id);
+                return (
+                  <div key={cat.id} className="rounded-xl overflow-hidden border border-stone-200">
+                    <div className={`${cat.headerBg} ${cat.headerText} flex items-center gap-3 px-4 py-3`}>
+                      <img src={cat.image} alt={cat.label} style={{ height: "40px", width: "auto", objectFit: "contain" }} />
+                      <span className="font-bold text-sm uppercase tracking-wide">"{cat.label}"</span>
+                    </div>
+                    <div className={`${cat.bodyBg} p-3 space-y-3`}>
+                      {catItems.length === 0 ? (
+                        <div className="text-[11px] text-stone-400 italic text-center py-3">No items assigned yet</div>
+                      ) : (
+                        displayData.teams.map((team) => {
+                          const teamItems = displayData.items
+                            .filter((i) => i.teamId === team.id && i.strategicCategory === cat.id)
+                            .sort((a, b) => displayData.columns.findIndex((c) => c.id === b.columnId) - displayData.columns.findIndex((c) => c.id === a.columnId));
+                          if (teamItems.length === 0) return null;
+                          return (
+                            <div key={team.id}>
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">{team.name}</div>
+                              <div className="space-y-1.5">
+                                {teamItems.map((item) => {
+                                  const col = displayData.columns.find((c) => c.id === item.columnId);
+                                  const { cleanText } = extractDate(item.text);
+                                  const flagClass = flagStyles[item.flag] || "";
+                                  return (
+                                    <div key={item.id} onClick={() => setExpandedItem(item.id)}
+                                      className={`rounded-md border px-2 py-1.5 text-xs cursor-pointer transition-all hover:shadow-sm ${item.flag ? flagClass : "bg-white border-stone-200 hover:border-stone-400"}`}>
+                                      <div className="flex items-start gap-1.5">
+                                        {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
+                                        <span className="flex-1 leading-snug">{cleanText}</span>
+                                        <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
+                                      </div>
+                                      {col && <div className="mt-1"><span className="inline-flex font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-300 text-stone-600 px-1.5 py-0.5 rounded-sm">{col.subtitle || col.title}</span></div>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Desktop layout: grid ── */}
+            <div className="hidden md:block">
             {/* Animal images row */}
-            <div style={{ display: "grid", gridTemplateColumns: "180px repeat(4, 1fr)", gap: "12px", alignItems: "flex-end" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "140px repeat(4, 1fr)", gap: "12px", alignItems: "flex-end" }}>
               <div />
               {STRATEGIC_CATEGORIES.map((cat) => (
                 <div key={cat.id} className="flex justify-center items-end" style={{ height: "120px" }}>
@@ -1285,13 +1337,10 @@ export default function RoadmapTracker() {
             </div>
 
             {/* Category header row */}
-            <div style={{ display: "grid", gridTemplateColumns: "180px repeat(4, 1fr)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "140px repeat(4, 1fr)" }}>
               <div />
               {STRATEGIC_CATEGORIES.map((cat, i) => (
-                <div
-                  key={cat.id}
-                  className={`${cat.headerBg} ${cat.headerText} px-4 py-3 text-center font-bold text-sm tracking-wide uppercase ${i === 0 ? "rounded-tl-lg" : ""} ${i === 3 ? "rounded-tr-lg" : ""}`}
-                >
+                <div key={cat.id} className={`${cat.headerBg} ${cat.headerText} px-4 py-3 text-center font-bold text-sm tracking-wide uppercase ${i === 0 ? "rounded-tl-lg" : ""} ${i === 3 ? "rounded-tr-lg" : ""}`}>
                   "{cat.label}"
                 </div>
               ))}
@@ -1301,7 +1350,7 @@ export default function RoadmapTracker() {
             {displayData.teams.map((team, teamIdx) => {
               const isLastTeam = teamIdx === displayData.teams.length - 1;
               return (
-                <div key={team.id} style={{ display: "grid", gridTemplateColumns: "180px repeat(4, 1fr)" }}>
+                <div key={team.id} style={{ display: "grid", gridTemplateColumns: "140px repeat(4, 1fr)" }}>
                   <div className={`bg-stone-200 border border-stone-300 border-t-0 flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center ${isLastTeam ? "rounded-bl-lg" : ""}`}>
                     {team.name}
                   </div>
@@ -1311,10 +1360,7 @@ export default function RoadmapTracker() {
                       .filter((i) => i.teamId === team.id && i.strategicCategory === cat.id)
                       .sort((a, b) => displayData.columns.findIndex((c) => c.id === b.columnId) - displayData.columns.findIndex((c) => c.id === a.columnId));
                     return (
-                      <div
-                        key={cat.id}
-                        className={`${cat.bodyBg} border border-stone-200 border-t-0 border-l-0 p-2 min-h-[100px] ${isLastTeam && isLastCat ? "rounded-br-lg" : ""}`}
-                      >
+                      <div key={cat.id} className={`${cat.bodyBg} border border-stone-200 border-t-0 border-l-0 p-2 min-h-[100px] ${isLastTeam && isLastCat ? "rounded-br-lg" : ""}`}>
                         {cellItems.length === 0 ? (
                           <div className="text-[10px] text-stone-300 italic text-center pt-6">—</div>
                         ) : (
@@ -1323,31 +1369,14 @@ export default function RoadmapTracker() {
                             const { cleanText } = extractDate(item.text);
                             const flagClass = flagStyles[item.flag] || "";
                             return (
-                              <div
-                                key={item.id}
-                                onClick={() => setExpandedItem(item.id)}
-                                className={`rounded-md border px-2 py-1.5 text-xs mb-1.5 last:mb-0 cursor-pointer transition-all hover:shadow-sm ${item.flag ? flagClass : "bg-white border-stone-200 hover:border-stone-400"}`}
-                              >
+                              <div key={item.id} onClick={() => setExpandedItem(item.id)}
+                                className={`rounded-md border px-2 py-1.5 text-xs mb-1.5 last:mb-0 cursor-pointer transition-all hover:shadow-sm ${item.flag ? flagClass : "bg-white border-stone-200 hover:border-stone-400"}`}>
                                 <div className="flex items-start gap-1.5">
-                                  {item.tag && (
-                                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>
-                                  )}
+                                  {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
                                   <span className="flex-1 leading-snug">{cleanText}</span>
-                                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${
-                                    item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                                    item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                                    item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                                    item.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                                    "text-stone-200"
-                                  }`} />
+                                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
                                 </div>
-                                {col && (
-                                  <div className="mt-1">
-                                    <span className="inline-flex font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-300 text-stone-600 px-1.5 py-0.5 rounded-sm">
-                                      {col.subtitle || col.title}
-                                    </span>
-                                  </div>
-                                )}
+                                {col && <div className="mt-1"><span className="inline-flex font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-300 text-stone-600 px-1.5 py-0.5 rounded-sm">{col.subtitle || col.title}</span></div>}
                               </div>
                             );
                           })
@@ -1358,6 +1387,7 @@ export default function RoadmapTracker() {
                 </div>
               );
             })}
+            </div>{/* closes desktop grid */}
 
             {/* Unassigned items */}
             {(() => {
