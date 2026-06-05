@@ -1347,11 +1347,10 @@ export default function RoadmapTracker() {
             </div>
 
             {/* Team swim lane rows */}
-            {displayData.teams.map((team, teamIdx) => {
-              const isLastTeam = teamIdx === displayData.teams.length - 1;
+            {displayData.teams.map((team) => {
               return (
-                <div key={team.id} style={{ display: "grid", gridTemplateColumns: "140px repeat(4, 1fr)" }}>
-                  <div className={`bg-stone-200 border border-stone-300 border-t-0 flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center ${isLastTeam ? "rounded-bl-lg" : ""}`}>
+                <div key={team.id} style={{ display: "grid", gridTemplateColumns: "140px repeat(4, 1fr)", marginTop: "10px" }}>
+                  <div className="bg-stone-200 border border-stone-300 rounded-l-lg flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center">
                     {team.name}
                   </div>
                   {STRATEGIC_CATEGORIES.map((cat, catIdx) => {
@@ -1360,7 +1359,7 @@ export default function RoadmapTracker() {
                       .filter((i) => i.teamId === team.id && i.strategicCategory === cat.id)
                       .sort((a, b) => displayData.columns.findIndex((c) => c.id === b.columnId) - displayData.columns.findIndex((c) => c.id === a.columnId));
                     return (
-                      <div key={cat.id} className={`${cat.bodyBg} border border-stone-200 border-t-0 border-l-0 p-2 min-h-[100px] ${isLastTeam && isLastCat ? "rounded-br-lg" : ""}`}>
+                      <div key={cat.id} className={`${cat.bodyBg} border border-stone-200 border-l-0 p-2 min-h-[100px] ${isLastCat ? "rounded-r-lg" : ""}`}>
                         {cellItems.length === 0 ? (
                           <div className="text-[10px] text-stone-300 italic text-center pt-6">—</div>
                         ) : (

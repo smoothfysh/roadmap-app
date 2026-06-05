@@ -3,457 +3,274 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Strategic View Preview — Roadmap App</title>
+  <title>Strategic View — Swimlane Spacing Preview</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; min-height: 100vh; }
+    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; min-height: 100vh; padding: 24px; }
 
-    /* ── Top bar ── */
-    .topbar {
-      background: #e7e5e4; border-bottom: 1px solid #d6d3d1;
-      padding: 10px 24px; display: flex; align-items: center; gap: 12px;
-    }
-    .topbar-title { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #57534e; }
-    .topbar-btn {
-      font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      border: 1px solid #d6d3d1; background: #fff; color: #57534e;
-      padding: 4px 10px; border-radius: 4px; margin-left: auto; cursor: pointer;
-    }
-    .topbar-btn + .topbar-btn { margin-left: 6px; }
-
-    /* ── Page heading ── */
-    .page-heading {
-      padding: 16px 24px 0;
-      display: flex; align-items: center; gap: 12px;
-    }
-    .year { font-size: 36px; font-weight: 900; letter-spacing: -0.02em; color: #1c1917; }
-    .legend-dots { display: flex; gap: 6px; align-items: center; }
-    .legend-dots span { width: 14px; height: 14px; border-radius: 50%; }
-
-    /* ── View tabs ── */
-    .tabs {
-      padding: 12px 24px 0;
-      display: flex; gap: 2px; border-bottom: 2px solid #e7e5e4;
-    }
-    .tab {
-      font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      padding: 7px 16px; border-radius: 6px 6px 0 0; cursor: pointer;
-      border: 1px solid transparent; border-bottom: none;
-      color: #78716c; background: transparent; transition: all 0.15s;
-      margin-bottom: -2px;
-    }
-    .tab:hover { color: #1c1917; background: #f5f5f4; }
-    .tab.active {
-      color: #1c1917; background: #fafaf9;
-      border-color: #e7e5e4; border-bottom-color: #fafaf9;
+    h2.section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
+      color: #78716c; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e7e5e4;
     }
 
-    /* ── Views ── */
-    .view { display: none; padding: 20px 24px 40px; }
-    .view.active { display: block; }
-
-    /* ── ROADMAP view (simplified placeholder) ── */
-    .roadmap-grid {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
-      max-width: 1400px;
+    .preview-pair {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 40px;
     }
-    .rm-col-header {
-      border-radius: 8px 8px 0 0; padding: 14px; text-align: center;
-    }
-    .rm-col-header h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; }
-    .rm-col-header p  { font-size: 10px; margin-top: 3px; opacity: 0.75; }
-    .rm-col-body { border-radius: 0 0 8px 8px; padding: 10px; min-height: 280px; }
-    .rm-team { font-size: 10px; font-weight: 700; text-align: center; padding: 5px 8px; border-radius: 5px; margin-bottom: 7px; }
-    .rm-card { border-radius: 5px; border: 1px solid; padding: 5px 8px; font-size: 11px; margin-bottom: 5px; background: #fff; display: flex; align-items: center; gap: 5px; }
-    .rm-card .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-left: auto; }
 
-    /* ── STRATEGIC view ── */
-    .strategic-wrapper { max-width: 1500px; }
-
-    /* Column headers with animals */
-    .strategic-header-row {
+    /* ── Shared grid structure ── */
+    .strategic-grid {
       display: grid;
-      grid-template-columns: 160px repeat(4, 1fr);
-      gap: 0;
-      margin-bottom: 0;
+      grid-template-columns: 140px repeat(4, 1fr);
     }
-    .strategic-header-row .spacer { /* left label column */ }
 
+    /* Animal row */
     .animal-row {
       display: grid;
-      grid-template-columns: 160px repeat(4, 1fr);
+      grid-template-columns: 140px repeat(4, 1fr);
       gap: 12px;
-      margin-bottom: 0;
       align-items: flex-end;
-      padding-bottom: 0;
+      margin-bottom: 0;
     }
     .animal-cell {
-      display: flex; justify-content: center; align-items: flex-end;
-      height: 110px; padding-bottom: 4px;
+      display: flex; justify-content: center; align-items: flex-end; height: 90px;
     }
-    .animal-emoji { font-size: 72px; line-height: 1; filter: grayscale(1) brightness(0); }
+    .animal-emoji { font-size: 56px; line-height: 1; filter: grayscale(1) brightness(0); }
 
-    .cat-header {
-      border-radius: 8px 8px 0 0;
-      padding: 12px 16px;
-      text-align: center;
+    /* Category header */
+    .cat-header-cell {
+      padding: 10px 12px; text-align: center;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
     }
-    .cat-header h2 {
-      font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    /* Category colours */
     .cat-do-or-die    { background: #f9a8b8; color: #7f1d36; }
     .cat-stay         { background: #fcd34d; color: #78350f; }
     .cat-beat         { background: #bfdbfe; color: #1e3a8a; }
     .cat-disrupt      { background: #ddd6fe; color: #3b0764; }
-
     .cat-do-or-die-body { background: #fce7ed; }
     .cat-stay-body      { background: #fef9c3; }
     .cat-beat-body      { background: #eff6ff; }
     .cat-disrupt-body   { background: #f5f3ff; }
 
-    /* Grid: left column = team label, right 4 = category cells */
-    .strategic-grid {
-      display: grid;
-      grid-template-columns: 160px repeat(4, 1fr);
-    }
-
-    /* Team label (left sticky column) */
-    .team-label-cell {
-      background: #e7e5e4;
-      border: 1px solid #d6d3d1;
-      border-right: none;
+    /* Team label */
+    .team-label {
+      background: #e7e5e4; border: 1px solid #d6d3d1;
       display: flex; align-items: center; justify-content: center;
       padding: 10px 8px;
-      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-      text-align: center; color: #1c1917;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; text-align: center; color: #1c1917;
     }
-    .team-label-cell.first { border-radius: 8px 0 0 0; }
-    .team-label-cell.last  { border-radius: 0 0 0 8px; }
 
-    /* Category body cells */
+    /* Cell */
     .cat-cell {
-      border: 1px solid rgba(0,0,0,0.08);
+      border: 1px solid rgba(0,0,0,0.1);
       border-left: none;
-      padding: 10px;
-      min-height: 100px;
+      padding: 8px;
+      min-height: 80px;
     }
-    .cat-cell.round-tr { border-radius: 0 8px 0 0; }
-    .cat-cell.round-br { border-radius: 0 0 8px 0; }
 
-    /* Item card inside strategic view */
+    /* ── NO GAP version ── */
+    .no-gap .strategic-grid + .strategic-grid .team-label,
+    .no-gap .strategic-grid + .strategic-grid .cat-cell { border-top: none; }
+    .no-gap .team-label.first { border-radius: 8px 0 0 0; }
+    .no-gap .team-label.last  { border-radius: 0 0 0 8px; }
+    .no-gap .cat-header-cell:first-of-type { border-radius: 0; }
+    .no-gap .cat-header-cell.round-tr { border-radius: 0 8px 0 0; }
+    .no-gap .cat-cell.round-br { border-radius: 0 0 8px 0; }
+
+    /* ── WITH GAP version ── */
+    .with-gap .strategic-grid {
+      margin-bottom: 6px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    /* each row: team label gets full border, cells get their own border */
+    .with-gap .strategic-grid .team-label {
+      border-radius: 8px 0 0 8px;
+      border: 1px solid #d6d3d1;
+    }
+    .with-gap .strategic-grid .cat-cell {
+      border: 1px solid rgba(0,0,0,0.1);
+      border-left: none;
+    }
+    .with-gap .strategic-grid:last-child { margin-bottom: 0; }
+
+    /* ── Item cards ── */
     .s-card {
-      border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
-      padding: 6px 9px; font-size: 11px; margin-bottom: 6px;
-      background: #fff;
-      display: flex; flex-direction: column; gap: 3px;
+      border-radius: 5px; border: 1px solid rgba(0,0,0,0.1);
+      padding: 5px 8px; font-size: 10px; margin-bottom: 5px; background: #fff;
+      display: flex; flex-direction: column; gap: 2px;
     }
     .s-card:last-child { margin-bottom: 0; }
-    .s-card-top { display: flex; align-items: center; gap: 5px; }
-    .s-card-text { flex: 1; line-height: 1.35; font-size: 11px; color: #1c1917; }
-    .s-card-badges { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
-    .quarter-pill {
-      font-size: 9px; font-weight: 600; letter-spacing: 0.08em;
-      background: #fff; border: 1px solid #a8a29e;
-      color: #57534e; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
-    }
-    .tag-badge {
-      font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
-    }
-    .tag-de  { background: #fbbf24; color: #000; }
-    .tag-fr  { background: #dc2626; color: #fff; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-left: auto; }
-    .dot-none   { border: 1.5px solid #d6d3d1; background: transparent; }
-    .dot-amber  { background: #fbbf24; }
-    .dot-rose   { background: #f43f5e; }
-    .dot-green  { background: #10b981; }
-    .dot-grey   { background: #9ca3af; }
+    .s-card-row { display: flex; align-items: center; gap: 4px; }
+    .s-card-text { flex: 1; line-height: 1.3; }
+    .tag-de { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: #fbbf24; color: #000; flex-shrink: 0; }
+    .tag-fr { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: #dc2626; color: #fff; flex-shrink: 0; }
+    .q-pill { font-size: 8px; font-weight: 600; background: #fff; border: 1px solid #a8a29e; color: #57534e; padding: 1px 4px; border-radius: 2px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: auto; }
+    .dot-amber { background: #fbbf24; }
+    .dot-rose  { background: #f43f5e; }
+    .dot-none  { border: 1.5px solid #d6d3d1; }
+    .empty { font-size: 9px; color: #d1d5db; font-style: italic; text-align: center; padding: 14px 4px; }
 
-    .empty-cell {
-      font-size: 10px; color: #d6d3d1; font-style: italic; text-align: center;
-      padding: 16px 8px;
-    }
-
-    /* Quarter legend at bottom of strategic view */
-    .quarter-legend {
-      margin-top: 20px; display: flex; align-items: center; gap: 16px;
-      font-size: 10px; color: #78716c;
-    }
-    .quarter-legend-title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 4px; }
-    .ql-item { display: flex; align-items: center; gap: 5px; }
-    .ql-dot { width: 8px; height: 8px; border-radius: 50%; }
-
-    /* Unassigned banner */
-    .unassigned-banner {
-      margin-top: 20px; background: #fff; border: 1px dashed #d6d3d1;
-      border-radius: 8px; padding: 14px 18px;
-    }
-    .unassigned-banner h3 { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a8a29e; margin-bottom: 10px; }
-    .unassigned-items { display: flex; flex-wrap: wrap; gap: 8px; }
-    .u-item {
-      font-size: 11px; background: #f5f5f4; border: 1px solid #e7e5e4;
-      border-radius: 5px; padding: 4px 10px; color: #57534e;
-    }
-
-    /* Note box */
-    .note {
-      margin-top: 24px; background: #fef9c3; border: 1px solid #fcd34d;
-      border-radius: 8px; padding: 12px 16px; font-size: 11px; color: #78350f; max-width: 700px;
-    }
-    .note strong { font-weight: 700; }
+    .label { font-size: 10px; font-weight: 600; color: #78716c; margin-bottom: 12px; text-align: center; letter-spacing: 0.08em; text-transform: uppercase; }
+    .badge-current  { display: inline-block; background: #e7e5e4; color: #57534e; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .badge-proposed { display: inline-block; background: #1c1917; color: #fff;     font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.08em; text-transform: uppercase; }
   </style>
 </head>
 <body>
 
-<!-- Top bar -->
-<div class="topbar">
-  <div class="topbar-title">My Roadmap</div>
-  <div class="topbar-btn">Share as URL Encoded</div>
-  <div class="topbar-btn">Export CSV</div>
-  <div class="topbar-btn">Backup</div>
-</div>
+<h2 class="section-title">Strategic view — swimlane spacing mockup</h2>
 
-<!-- Page heading -->
-<div class="page-heading">
-  <div class="year">2026</div>
-  <div class="legend-dots">
-    <span style="background:#10b981"></span>
-    <span style="background:#fbbf24"></span>
-    <span style="background:#f43f5e"></span>
+<div class="preview-pair">
+
+  <!-- ══════════════ CURRENT (no gap) ══════════════ -->
+  <div>
+    <div class="label"><span class="badge-current">Current — no gap</span></div>
+    <div class="no-gap">
+
+      <!-- Animal row -->
+      <div class="animal-row">
+        <div></div>
+        <div class="animal-cell"><span class="animal-emoji">🦕</span></div>
+        <div class="animal-cell"><span class="animal-emoji">🦚</span></div>
+        <div class="animal-cell"><span class="animal-emoji">🦁</span></div>
+        <div class="animal-cell"><span class="animal-emoji">🦄</span></div>
+      </div>
+
+      <!-- Header row -->
+      <div class="strategic-grid">
+        <div></div>
+        <div class="cat-header-cell cat-do-or-die">"Do or Die"</div>
+        <div class="cat-header-cell cat-stay">"Stay Relevant"</div>
+        <div class="cat-header-cell cat-beat">"Beat the Competition"</div>
+        <div class="cat-header-cell cat-disrupt round-tr">"Disrupt"</div>
+      </div>
+
+      <!-- SEEKER TEAM -->
+      <div class="strategic-grid">
+        <div class="team-label first">Seeker Team</div>
+        <div class="cat-cell cat-do-or-die-body">
+          <div class="s-card"><div class="s-card-row"><span class="tag-de">DE</span><span class="s-card-text">New Schufa Funnel</span><span class="dot dot-rose"></span></div><div><span class="q-pill">Q2 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-stay-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Job alert improvements</span><span class="dot dot-amber"></span></div><div><span class="q-pill">Q2 2026</span></div></div>
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Saved search redesign</span><span class="dot dot-none"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-beat-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Onboarding v2</span><span class="dot dot-none"></span></div><div><span class="q-pill">LIVE</span></div></div>
+        </div>
+        <div class="cat-cell cat-disrupt-body"><div class="empty">—</div></div>
+      </div>
+
+      <!-- DEMAND TEAM -->
+      <div class="strategic-grid">
+        <div class="team-label">Demand Team</div>
+        <div class="cat-cell cat-do-or-die-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">New Advertising Methods</span><span class="dot dot-rose"></span></div><div><span class="q-pill">Q2 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-stay-body">
+          <div class="s-card"><div class="s-card-row"><span class="tag-fr">FR</span><span class="s-card-text">Localisation rollout</span><span class="dot dot-none"></span></div><div><span class="q-pill">LIVE</span></div></div>
+        </div>
+        <div class="cat-cell cat-beat-body"><div class="empty">—</div></div>
+        <div class="cat-cell cat-disrupt-body"><div class="empty">—</div></div>
+      </div>
+
+      <!-- PRODUCT TEAM -->
+      <div class="strategic-grid">
+        <div class="team-label last">Product Team</div>
+        <div class="cat-cell cat-do-or-die-body"><div class="empty">—</div></div>
+        <div class="cat-cell cat-stay-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">STORE for Financing leads</span><span class="dot dot-amber"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Trusted Badge (SEEKER+)</span><span class="dot dot-none"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-beat-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">CS Consulting — brokers</span><span class="dot dot-none"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-disrupt-body round-br">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">LeadSmart</span><span class="dot dot-none"></span></div><div><span class="q-pill">Future</span></div></div>
+        </div>
+      </div>
+
+    </div><!-- /no-gap -->
   </div>
-</div>
 
-<!-- Tabs -->
-<div class="tabs">
-  <div class="tab" id="tab-roadmap" onclick="switchTab('roadmap')">📋 Roadmap view</div>
-  <div class="tab active" id="tab-strategic" onclick="switchTab('strategic')">🎯 Strategic view</div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════
-     ROADMAP VIEW (simplified placeholder)
-════════════════════════════════════════════════════ -->
-<div class="view" id="view-roadmap">
-  <div class="roadmap-grid">
-    <!-- DONE -->
-    <div>
-      <div class="rm-col-header" style="background:#6ee7b7;color:#064e3b"><h2>DONE</h2><p>Released stuff... already LIVE!</p></div>
-      <div class="rm-col-body" style="background:#f0fdf4">
-        <div class="rm-team" style="background:#a7f3d0">SEEKER TEAM</div>
-        <div class="rm-card" style="border-color:#bbf7d0">Onboarding v2 launch <span class="dot" style="background:#10b981"></span></div>
-        <div class="rm-team" style="background:#a7f3d0;margin-top:10px">DEMAND TEAM</div>
-        <div class="rm-card" style="border-color:#bbf7d0"><span class="tag-badge tag-fr" style="font-size:9px;padding:1px 4px;border-radius:3px">FR</span> Localisation rollout <span class="dot" style="background:#10b981"></span></div>
+  <!-- ══════════════ PROPOSED (6px gap) ══════════════ -->
+  <div>
+    <div class="label"><span class="badge-proposed">Proposed — 6px gap between swimlanes</span></div>
+    <div class="with-gap">
+
+      <!-- Animal row -->
+      <div class="animal-row">
+        <div></div>
+        <div class="animal-cell"><span class="animal-emoji">🦕</span></div>
+        <div class="animal-cell"><span class="animal-emoji">🦚</span></div>
+        <div class="animal-cell"><span class="animal-emoji">🦁</span></div>
+        <div class="animal-cell"><span class="animal-emoji">🦄</span></div>
       </div>
-    </div>
-    <!-- COMING SOON -->
-    <div>
-      <div class="rm-col-header" style="background:#93c5fd;color:#1e3a8a"><h2>COMING SOON</h2><p>Q2 2026</p></div>
-      <div class="rm-col-body" style="background:#eff6ff">
-        <div class="rm-team" style="background:#bfdbfe">SEEKER TEAM</div>
-        <div class="rm-card" style="border-color:#bfdbfe"><span class="tag-badge tag-de" style="font-size:9px;padding:1px 4px;border-radius:3px">DE</span> Job alert improvements <span class="dot" style="background:#fbbf24"></span></div>
-        <div class="rm-card" style="border-color:#bfdbfe">Profile completeness nudge <span class="dot" style="border:1.5px solid #d6d3d1"></span></div>
-        <div class="rm-team" style="background:#bfdbfe;margin-top:10px">DEMAND TEAM</div>
-        <div class="rm-card" style="border-color:#bfdbfe">New Advertising Methods <span class="dot" style="background:#f43f5e"></span></div>
+
+      <!-- Header row (no margin-bottom override) -->
+      <div class="strategic-grid" style="margin-bottom:0; border-radius:8px 8px 0 0;">
+        <div></div>
+        <div class="cat-header-cell cat-do-or-die" style="border-radius:8px 0 0 0;">"Do or Die"</div>
+        <div class="cat-header-cell cat-stay">"Stay Relevant"</div>
+        <div class="cat-header-cell cat-beat">"Beat the Competition"</div>
+        <div class="cat-header-cell cat-disrupt" style="border-radius:0 8px 0 0;">"Disrupt"</div>
       </div>
-    </div>
-    <!-- AFTER THAT -->
-    <div>
-      <div class="rm-col-header" style="background:#fcd34d;color:#78350f"><h2>AFTER THAT</h2><p>Q3 2026</p></div>
-      <div class="rm-col-body" style="background:#fffbeb">
-        <div class="rm-team" style="background:#fde68a">SEEKER TEAM</div>
-        <div class="rm-card" style="border-color:#fde68a">Saved search redesign <span class="dot" style="border:1.5px solid #d6d3d1"></span></div>
-        <div class="rm-team" style="background:#fde68a;margin-top:10px">PRODUCT TEAM</div>
-        <div class="rm-card" style="border-color:#fde68a">Trusted Badge (SEEKER+) <span class="dot" style="border:1.5px solid #d6d3d1"></span></div>
-        <div class="rm-card" style="border-color:#fde68a">STORE for Financing leads <span class="dot" style="background:#fbbf24"></span></div>
+
+      <!-- SEEKER TEAM -->
+      <div class="strategic-grid" style="margin-top:6px;">
+        <div class="team-label">Seeker Team</div>
+        <div class="cat-cell cat-do-or-die-body">
+          <div class="s-card"><div class="s-card-row"><span class="tag-de">DE</span><span class="s-card-text">New Schufa Funnel</span><span class="dot dot-rose"></span></div><div><span class="q-pill">Q2 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-stay-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Job alert improvements</span><span class="dot dot-amber"></span></div><div><span class="q-pill">Q2 2026</span></div></div>
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Saved search redesign</span><span class="dot dot-none"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-beat-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Onboarding v2</span><span class="dot dot-none"></span></div><div><span class="q-pill">LIVE</span></div></div>
+        </div>
+        <div class="cat-cell cat-disrupt-body" style="border-radius:0 8px 8px 0;"><div class="empty">—</div></div>
       </div>
-    </div>
-    <!-- FUTURE -->
-    <div>
-      <div class="rm-col-header" style="background:#cbd5e1;color:#1e293b"><h2>FUTURE</h2><p>Beyond the next 6 months</p></div>
-      <div class="rm-col-body" style="background:#f8fafc">
-        <div class="rm-team" style="background:#e2e8f0">SEEKER TEAM</div>
-        <div class="rm-card" style="border-color:#e2e8f0">AI-powered recommendations <span class="dot" style="background:#f43f5e"></span></div>
-        <div class="rm-team" style="background:#e2e8f0;margin-top:10px">PRODUCT TEAM</div>
-        <div class="rm-card" style="border-color:#e2e8f0">LeadSmart (non-exclusive leads) <span class="dot" style="border:1.5px solid #d6d3d1"></span></div>
+
+      <!-- DEMAND TEAM -->
+      <div class="strategic-grid" style="margin-top:6px;">
+        <div class="team-label">Demand Team</div>
+        <div class="cat-cell cat-do-or-die-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">New Advertising Methods</span><span class="dot dot-rose"></span></div><div><span class="q-pill">Q2 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-stay-body">
+          <div class="s-card"><div class="s-card-row"><span class="tag-fr">FR</span><span class="s-card-text">Localisation rollout</span><span class="dot dot-none"></span></div><div><span class="q-pill">LIVE</span></div></div>
+        </div>
+        <div class="cat-cell cat-beat-body"><div class="empty">—</div></div>
+        <div class="cat-cell cat-disrupt-body" style="border-radius:0 8px 8px 0;"><div class="empty">—</div></div>
       </div>
-    </div>
+
+      <!-- PRODUCT TEAM -->
+      <div class="strategic-grid" style="margin-top:6px;">
+        <div class="team-label">Product Team</div>
+        <div class="cat-cell cat-do-or-die-body"><div class="empty">—</div></div>
+        <div class="cat-cell cat-stay-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">STORE for Financing leads</span><span class="dot dot-amber"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">Trusted Badge (SEEKER+)</span><span class="dot dot-none"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-beat-body">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">CS Consulting — brokers</span><span class="dot dot-none"></span></div><div><span class="q-pill">Q3 2026</span></div></div>
+        </div>
+        <div class="cat-cell cat-disrupt-body" style="border-radius:0 8px 8px 0;">
+          <div class="s-card"><div class="s-card-row"><span class="s-card-text">LeadSmart</span><span class="dot dot-none"></span></div><div><span class="q-pill">Future</span></div></div>
+        </div>
+      </div>
+
+    </div><!-- /with-gap -->
   </div>
-</div>
 
+</div><!-- /preview-pair -->
 
-<!-- ═══════════════════════════════════════════════════
-     STRATEGIC VIEW
-════════════════════════════════════════════════════ -->
-<div class="view active" id="view-strategic">
-  <div class="strategic-wrapper">
+<p style="font-size:10px;color:#a8a29e;font-family:'IBM Plex Mono',monospace;">
+  Proposed change: 6px gap between each swimlane row. Colours unchanged. Say the word and I'll apply it.
+</p>
 
-    <!-- Animal row -->
-    <div class="animal-row">
-      <div></div><!-- spacer for team label column -->
-      <div class="animal-cell"><span class="animal-emoji">🦕</span></div>
-      <div class="animal-cell"><span class="animal-emoji">🦚</span></div>
-      <div class="animal-cell"><span class="animal-emoji">🦁</span></div>
-      <div class="animal-cell"><span class="animal-emoji">🦄</span></div>
-    </div>
-
-    <!-- Category header row -->
-    <div class="strategic-grid" style="margin-bottom:0;">
-      <div></div><!-- spacer -->
-      <div class="cat-header cat-do-or-die"><h2>"Do or Die"</h2></div>
-      <div class="cat-header cat-stay"><h2>"Stay Relevant"</h2></div>
-      <div class="cat-header cat-beat"><h2>"Beat the Competition"</h2></div>
-      <div class="cat-header cat-disrupt" style="border-radius:0 8px 0 0;"><h2>"Disrupt"</h2></div>
-    </div>
-
-    <!-- ── SEEKER TEAM row ── -->
-    <div class="strategic-grid">
-      <div class="team-label-cell first">Seeker Team</div>
-
-      <!-- Do or Die / Seeker -->
-      <div class="cat-cell cat-do-or-die-body">
-        <div class="s-card">
-          <div class="s-card-top">
-            <span class="tag-badge tag-de">DE</span>
-            <span class="s-card-text">New Schufa Funnel (UI/UX + Payments + ID verification)</span>
-            <span class="status-dot dot-rose"></span>
-          </div>
-          <div class="s-card-badges"><span class="quarter-pill">Q2 2026</span></div>
-        </div>
-      </div>
-
-      <!-- Stay Relevant / Seeker -->
-      <div class="cat-cell cat-stay-body">
-        <div class="s-card">
-          <span class="s-card-text">Profile completeness nudge</span>
-          <div class="s-card-badges"><span class="quarter-pill">Q2 2026</span></div>
-        </div>
-        <div class="s-card">
-          <span class="s-card-text">Saved search redesign</span>
-          <div class="s-card-badges"><span class="quarter-pill">Q3 2026</span></div>
-        </div>
-        <div class="s-card">
-          <span class="s-card-text">Job alert improvements</span>
-          <div class="s-card-badges">
-            <span class="tag-badge tag-de">DE</span>
-            <span class="quarter-pill">Q2 2026</span>
-            <span class="status-dot dot-amber" style="margin-left:2px"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Beat the Competition / Seeker -->
-      <div class="cat-cell cat-beat-body">
-        <div class="s-card">
-          <span class="s-card-text">Onboarding v2 launch</span>
-          <div class="s-card-badges"><span class="quarter-pill">LIVE ✓</span></div>
-        </div>
-        <div class="s-card">
-          <span class="s-card-text">AI-powered recommendations</span>
-          <div class="s-card-badges"><span class="quarter-pill">Future</span><span class="status-dot dot-rose" style="margin-left:2px"></span></div>
-        </div>
-      </div>
-
-      <!-- Disrupt / Seeker -->
-      <div class="cat-cell cat-disrupt-body round-tr">
-        <div class="empty-cell">No items yet</div>
-      </div>
-    </div>
-
-    <!-- ── DEMAND TEAM row ── -->
-    <div class="strategic-grid">
-      <div class="team-label-cell">Demand Team</div>
-
-      <!-- Do or Die / Demand -->
-      <div class="cat-cell cat-do-or-die-body">
-        <div class="s-card">
-          <span class="s-card-text">New Advertising Methods (ex. REELS)</span>
-          <div class="s-card-badges"><span class="quarter-pill">Q2 2026</span><span class="status-dot dot-rose" style="margin-left:2px"></span></div>
-        </div>
-      </div>
-
-      <!-- Stay Relevant / Demand -->
-      <div class="cat-cell cat-stay-body">
-        <div class="s-card">
-          <span class="s-card-text">Localisation rollout</span>
-          <div class="s-card-badges"><span class="tag-badge tag-fr">FR</span><span class="quarter-pill">LIVE ✓</span></div>
-        </div>
-      </div>
-
-      <!-- Beat the Competition / Demand -->
-      <div class="cat-cell cat-beat-body">
-        <div class="empty-cell">No items yet</div>
-      </div>
-
-      <!-- Disrupt / Demand -->
-      <div class="cat-cell cat-disrupt-body">
-        <div class="empty-cell">No items yet</div>
-      </div>
-    </div>
-
-    <!-- ── PRODUCT TEAM row ── -->
-    <div class="strategic-grid">
-      <div class="team-label-cell last">Product Team</div>
-
-      <!-- Do or Die / Product -->
-      <div class="cat-cell cat-do-or-die-body">
-        <div class="empty-cell">No items yet</div>
-      </div>
-
-      <!-- Stay Relevant / Product -->
-      <div class="cat-cell cat-stay-body">
-        <div class="s-card">
-          <span class="s-card-text">STORE for Financing leads — Monetized</span>
-          <div class="s-card-badges"><span class="quarter-pill">Q3 2026</span><span class="status-dot dot-amber" style="margin-left:2px"></span></div>
-        </div>
-        <div class="s-card">
-          <span class="s-card-text">Trusted Badge aka Verified Users (SEEKER+)</span>
-          <div class="s-card-badges"><span class="quarter-pill">Q3 2026</span></div>
-        </div>
-      </div>
-
-      <!-- Beat the Competition / Product -->
-      <div class="cat-cell cat-beat-body">
-        <div class="s-card">
-          <span class="s-card-text">Working with financing brokers → CS CONSULTING</span>
-          <div class="s-card-badges"><span class="quarter-pill">Q3 2026</span></div>
-        </div>
-      </div>
-
-      <!-- Disrupt / Product -->
-      <div class="cat-cell cat-disrupt-body round-br">
-        <div class="s-card">
-          <span class="s-card-text">LeadSmart — Non-exclusive &amp; un-sold leads</span>
-          <div class="s-card-badges"><span class="quarter-pill">Future</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quarter legend -->
-    <div class="quarter-legend">
-      <span class="quarter-legend-title">Quarter key</span>
-      <div class="ql-item"><span class="ql-dot" style="background:#6ee7b7"></span> LIVE / Done</div>
-      <div class="ql-item"><span class="ql-dot" style="background:#93c5fd"></span> Q2 2026 — Coming Soon</div>
-      <div class="ql-item"><span class="ql-dot" style="background:#fcd34d"></span> Q3 2026 — After That</div>
-      <div class="ql-item"><span class="ql-dot" style="background:#cbd5e1"></span> Future</div>
-    </div>
-
-    <!-- Unassigned note -->
-    <div class="note">
-      <strong>How it works in the real app:</strong> each roadmap item will have a "Strategic category" field (Do or Die / Stay Relevant / Beat the Competition / Disrupt). Items without a category assigned appear in an Unassigned section below the grid. You can assign categories from the item modal. The quarter badge is automatically derived from whichever planning column the item sits in.
-    </div>
-
-  </div>
-</div>
-
-<script>
-  function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById('tab-' + tab).classList.add('active');
-    document.getElementById('view-' + tab).classList.add('active');
-  }
-</script>
 </body>
 </html>
