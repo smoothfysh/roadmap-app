@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 
 // ---------- Per-scope storage key (supports ?scope=name in URL) ----------
 const STORAGE_KEY = (() => {
@@ -340,6 +340,7 @@ export default function RoadmapTracker() {
   const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
   const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue"
   const [modalTab, setModalTab] = useState("details"); // "details" | "revenue"
+  const [revenueColIdx, setRevenueColIdx] = useState(1); // index into displayData.columns for quarter filter
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -1463,8 +1464,12 @@ export default function RoadmapTracker() {
 
         {/* ── Revenue Impact view ── */}
         {activeView === "revenue" && (() => {
-          const directItems   = displayData.items.filter((i) => i.revenueType === "direct");
-          const enablerItems  = displayData.items.filter((i) => i.revenueType === "enabler");
+          const safeIdx       = Math.min(revenueColIdx, displayData.columns.length - 1);
+          const selectedCol   = displayData.columns[safeIdx];
+          const allDirect     = displayData.items.filter((i) => i.revenueType === "direct");
+          const allEnablers   = displayData.items.filter((i) => i.revenueType === "enabler");
+          const directItems   = allDirect.filter((i) => i.columnId === selectedCol.id);
+          const enablerItems  = allEnablers.filter((i) => i.columnId === selectedCol.id);
           const estimated     = directItems.filter((i) => i.revenueUplift != null);
           const needsEstimate = directItems.filter((i) => i.revenueUplift == null);
           const totalUplift   = estimated.reduce((s, i) => s + i.revenueUplift, 0);
@@ -1517,6 +1522,27 @@ export default function RoadmapTracker() {
 
           return (
             <div className="max-w-[1800px] mx-auto">
+              {/* Quarter navigator */}
+              <div className="flex items-center justify-center gap-3 mb-6">
+                <button
+                  onClick={() => setRevenueColIdx((i) => Math.max(0, i - 1))}
+                  disabled={safeIdx === 0}
+                  className="w-8 h-8 flex items-center justify-center rounded-full border border-stone-300 text-stone-600 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-mono font-bold text-xl tracking-tight text-stone-900 min-w-[140px] text-center">
+                  {selectedCol.subtitle || selectedCol.title}
+                </span>
+                <button
+                  onClick={() => setRevenueColIdx((i) => Math.min(displayData.columns.length - 1, i + 1))}
+                  disabled={safeIdx === displayData.columns.length - 1}
+                  className="w-8 h-8 flex items-center justify-center rounded-full border border-stone-300 text-stone-600 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
               {/* Summary tiles */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
                 {[
