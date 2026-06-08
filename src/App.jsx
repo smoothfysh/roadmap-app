@@ -1653,6 +1653,13 @@ export default function RoadmapTracker() {
               className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Read-only banner */}
+              {isPreview && (
+                <div className="text-center text-[9px] font-mono font-semibold uppercase tracking-[0.25em] text-stone-400 bg-stone-50 border-b border-stone-100 py-1.5">
+                  Read Only
+                </div>
+              )}
+
               {/* Modal header */}
               <div className="px-5 py-4 border-b border-stone-100 flex items-start gap-3">
                 <div className="flex-1 min-w-0">
@@ -1706,7 +1713,7 @@ export default function RoadmapTracker() {
                       updateItem(modalItem.id, { tag: tag || null, text: text || e.target.value.trim() });
                     }}
                     onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-                    className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500"
+                    className={`w-full text-xs border border-stone-300 rounded px-2 py-1 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`}
                   />
                 </div>
                 <div>
@@ -1735,7 +1742,7 @@ export default function RoadmapTracker() {
                     onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { description: e.target.value.trim() || null })}
                     placeholder={isPreview ? "No notes added" : "Add a description or comment…"}
                     rows={8}
-                    className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white resize-none focus:outline-none focus:border-stone-500"
+                    className={`w-full text-xs border border-stone-300 rounded px-2 py-1 resize-none focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1842,7 +1849,7 @@ export default function RoadmapTracker() {
                           readOnly={isPreview}
                           onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { enablerNote: e.target.value.trim() || null })}
                           placeholder="What does this unlock and why does it matter?"
-                          className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                          className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
                       </div>
                     )}
 
