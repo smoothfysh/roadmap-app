@@ -1680,128 +1680,103 @@ export default function RoadmapTracker() {
               </div>
 
               {/* Modal inner tabs */}
-              {!isPreview && (
-                <div className="flex border-b border-stone-100">
-                  {[{ id: "details", label: "Details" }, { id: "revenue", label: "Revenue" }].map(({ id, label }) => (
-                    <button key={id} onClick={() => setModalTab(id)}
-                      className={`text-[10px] font-mono font-semibold uppercase tracking-wider px-5 py-2.5 border-b-2 transition-colors ${modalTab === id ? "border-stone-700 text-stone-900" : "border-transparent text-stone-400 hover:text-stone-700"}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="flex border-b border-stone-100">
+                {[{ id: "details", label: "Details" }, { id: "revenue", label: "Revenue" }].map(({ id, label }) => (
+                  <button key={id} onClick={() => setModalTab(id)}
+                    className={`text-[10px] font-mono font-semibold uppercase tracking-wider px-5 py-2.5 border-b-2 transition-colors ${modalTab === id ? "border-stone-700 text-stone-900" : "border-transparent text-stone-400 hover:text-stone-700"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
 
               {/* Modal body — Details tab */}
-              {(isPreview || modalTab === "details") && (
+              {modalTab === "details" && (
               <div className="px-5 py-4 space-y-4">
-                {!isPreview ? (
-                  <>
-                    <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
-                        Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue={modalItem.tag ? `${modalItem.tag}: ${modalItem.text}` : modalItem.text}
-                        autoFocus
-                        onBlur={(e) => {
-                          const { tag, text } = extractTag(e.target.value.trim());
-                          updateItem(modalItem.id, { tag: tag || null, text: text || e.target.value.trim() });
-                        }}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-                        className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Strategic Category</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          onClick={() => updateItem(modalItem.id, { strategicCategory: null })}
-                          className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${!modalItem.strategicCategory ? "border-stone-400 bg-stone-100 font-bold text-stone-900" : "border-stone-200 text-stone-400 hover:border-stone-400 hover:text-stone-700"}`}
-                        >None</button>
-                        {STRATEGIC_CATEGORIES.map((cat) => (
-                          <button
-                            key={cat.id}
-                            onClick={() => updateItem(modalItem.id, { strategicCategory: cat.id })}
-                            className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${modalItem.strategicCategory === cat.id ? `${cat.headerBg} ${cat.headerText} border-transparent font-bold` : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"}`}
-                          >"{cat.label}"</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Notes</label>
-                      <textarea
-                        defaultValue={modalItem.description || ""}
-                        onBlur={(e) => updateItem(modalItem.id, { description: e.target.value.trim() || null })}
-                        placeholder="Add a description or comment…"
-                        rows={8}
-                        className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white resize-none focus:outline-none focus:border-stone-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0052CC" }}>J</span>
-                        <input
-                          type="url"
-                          defaultValue={modalItem.jiraUrl || ""}
-                          onBlur={(e) => updateItem(modalItem.id, { jiraUrl: e.target.value.trim() || null })}
-                          placeholder="JIRA issue URL"
-                          className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
-                        />
-                        {modalItem.jiraUrl && (
-                          <a href={modalItem.jiraUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0065FF" }}>C</span>
-                        <input
-                          type="url"
-                          defaultValue={modalItem.confluenceUrl || ""}
-                          onBlur={(e) => updateItem(modalItem.id, { confluenceUrl: e.target.value.trim() || null })}
-                          placeholder="Confluence page URL"
-                          className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
-                        />
-                        {modalItem.confluenceUrl && (
-                          <a href={modalItem.confluenceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {modalItem.description && (
-                      <p className="text-xs text-stone-600 leading-relaxed whitespace-pre-wrap">{modalItem.description}</p>
+                <div>
+                  <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
+                    Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue={modalItem.tag ? `${modalItem.tag}: ${modalItem.text}` : modalItem.text}
+                    autoFocus={!isPreview}
+                    readOnly={isPreview}
+                    onBlur={isPreview ? undefined : (e) => {
+                      const { tag, text } = extractTag(e.target.value.trim());
+                      updateItem(modalItem.id, { tag: tag || null, text: text || e.target.value.trim() });
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                    className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Strategic Category</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      disabled={isPreview}
+                      onClick={isPreview ? undefined : () => updateItem(modalItem.id, { strategicCategory: null })}
+                      className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${!modalItem.strategicCategory ? "border-stone-400 bg-stone-100 font-bold text-stone-900" : "border-stone-200 text-stone-400 hover:border-stone-400 hover:text-stone-700"}`}
+                    >None</button>
+                    {STRATEGIC_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat.id}
+                        disabled={isPreview}
+                        onClick={isPreview ? undefined : () => updateItem(modalItem.id, { strategicCategory: cat.id })}
+                        className={`text-[10px] font-mono px-2 py-1 rounded border transition-colors ${modalItem.strategicCategory === cat.id ? `${cat.headerBg} ${cat.headerText} border-transparent font-bold` : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"}`}
+                      >"{cat.label}"</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Notes</label>
+                  <textarea
+                    defaultValue={modalItem.description || ""}
+                    readOnly={isPreview}
+                    onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { description: e.target.value.trim() || null })}
+                    placeholder={isPreview ? "No notes added" : "Add a description or comment…"}
+                    rows={8}
+                    className="w-full text-xs border border-stone-300 rounded px-2 py-1 bg-white resize-none focus:outline-none focus:border-stone-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0052CC" }}>J</span>
+                    <input
+                      type="url"
+                      defaultValue={modalItem.jiraUrl || ""}
+                      readOnly={isPreview}
+                      onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { jiraUrl: e.target.value.trim() || null })}
+                      placeholder="JIRA issue URL"
+                      className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
+                    />
+                    {modalItem.jiraUrl && (
+                      <a href={modalItem.jiraUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     )}
-                    <div className="flex flex-wrap gap-2">
-                      {modalItem.jiraUrl && (
-                        <a href={modalItem.jiraUrl} target="_blank" rel="noopener noreferrer"
-                           className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#0052CC" }}>
-                          <span className="w-3.5 h-3.5 rounded flex items-center justify-center text-white font-bold text-[7px]" style={{ backgroundColor: "#0052CC" }}>J</span>
-                          JIRA <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                      {modalItem.confluenceUrl && (
-                        <a href={modalItem.confluenceUrl} target="_blank" rel="noopener noreferrer"
-                           className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#0065FF" }}>
-                          <span className="w-3.5 h-3.5 rounded flex items-center justify-center text-white font-bold text-[7px]" style={{ backgroundColor: "#0065FF" }}>C</span>
-                          Confluence <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
-                      {!modalItem.description && !modalItem.jiraUrl && !modalItem.confluenceUrl && (
-                        <span className="text-[10px] text-stone-400 italic">No notes or links added</span>
-                      )}
-                    </div>
-                  </>
-                )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0065FF" }}>C</span>
+                    <input
+                      type="url"
+                      defaultValue={modalItem.confluenceUrl || ""}
+                      readOnly={isPreview}
+                      onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { confluenceUrl: e.target.value.trim() || null })}
+                      placeholder="Confluence page URL"
+                      className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
+                    />
+                    {modalItem.confluenceUrl && (
+                      <a href={modalItem.confluenceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
               )}{/* end details tab */}
 
               {/* Modal body — Revenue tab */}
-              {!isPreview && modalTab === "revenue" && (() => {
+              {modalTab === "revenue" && (() => {
                 const doneColId = displayData.columns[0]?.id;
                 const directNotDone = displayData.items.filter((i) =>
                   i.revenueType === "direct" && i.columnId !== doneColId && i.id !== modalItem.id
@@ -1814,7 +1789,7 @@ export default function RoadmapTracker() {
                       <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Revenue Type</label>
                       <div className="flex gap-2 flex-wrap">
                         {[{ val: null, label: "None" }, { val: "direct", label: "Direct Contributor" }, { val: "enabler", label: "Enabler" }].map(({ val, label }) => (
-                          <button key={String(val)} onClick={() => updateItem(modalItem.id, { revenueType: val })}
+                          <button key={String(val)} disabled={isPreview} onClick={isPreview ? undefined : () => updateItem(modalItem.id, { revenueType: val })}
                             className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
                               modalItem.revenueType === val
                                 ? val === "direct"  ? "border-green-600 bg-green-50 text-green-800 font-bold"
@@ -1832,7 +1807,8 @@ export default function RoadmapTracker() {
                         <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Uplift (€)</label>
                         <input type="number" key={modalItem.id + "-uplift"}
                           defaultValue={modalItem.revenueUplift ?? ""}
-                          onBlur={(e) => updateItem(modalItem.id, { revenueUplift: e.target.value ? Number(e.target.value) : null })}
+                          readOnly={isPreview}
+                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { revenueUplift: e.target.value ? Number(e.target.value) : null })}
                           placeholder="e.g. 1800000"
                           className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
                         {modalItem.revenueUplift && (
@@ -1847,7 +1823,8 @@ export default function RoadmapTracker() {
                         <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Stream</label>
                         <input type="text" list="stream-datalist" key={modalItem.id + "-stream"}
                           defaultValue={modalItem.revenueStream ?? ""}
-                          onBlur={(e) => updateItem(modalItem.id, { revenueStream: e.target.value.trim() || null })}
+                          readOnly={isPreview}
+                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { revenueStream: e.target.value.trim() || null })}
                           placeholder="e.g. SCHUFA, Financing leads, Onsite ads…"
                           className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
                         <datalist id="stream-datalist">
@@ -1862,7 +1839,8 @@ export default function RoadmapTracker() {
                         <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Enabler Note</label>
                         <input type="text" key={modalItem.id + "-note"}
                           defaultValue={modalItem.enablerNote ?? ""}
-                          onBlur={(e) => updateItem(modalItem.id, { enablerNote: e.target.value.trim() || null })}
+                          readOnly={isPreview}
+                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { enablerNote: e.target.value.trim() || null })}
                           placeholder="What does this unlock and why does it matter?"
                           className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
                       </div>
@@ -1883,8 +1861,8 @@ export default function RoadmapTracker() {
                               const col = displayData.columns.find((c) => c.id === item.columnId);
                               const checked = (modalItem.enables || []).includes(item.id);
                               return (
-                                <label key={item.id} className="flex items-center gap-2 cursor-pointer group">
-                                  <input type="checkbox" checked={checked} onChange={(e) => {
+                                <label key={item.id} className={`flex items-center gap-2 group ${isPreview ? "" : "cursor-pointer"}`}>
+                                  <input type="checkbox" checked={checked} readOnly={isPreview} onChange={isPreview ? undefined : (e) => {
                                     const current = modalItem.enables || [];
                                     const updated = e.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id);
                                     updateItem(modalItem.id, { enables: updated.length > 0 ? updated : null });
@@ -1923,33 +1901,34 @@ export default function RoadmapTracker() {
               )}
 
               {/* Modal footer */}
-              {!isPreview && (
-                <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono text-stone-400 mr-1">Status</span>
-                    {STATUS_OPTIONS.map((opt) => (
-                      <button
-                        key={String(opt.flag)}
-                        onClick={() => setFlag(modalItem.id, opt.flag)}
-                        className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border transition-colors ${
-                          modalItem.flag === opt.flag
-                            ? "border-stone-400 bg-stone-100 font-bold text-stone-900"
-                            : "border-stone-200 text-stone-500 hover:border-stone-400 hover:bg-stone-50"
-                        }`}
-                      >
-                        <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+              <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-mono text-stone-400 mr-1">Status</span>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <button
+                      key={String(opt.flag)}
+                      disabled={isPreview}
+                      onClick={isPreview ? undefined : () => setFlag(modalItem.id, opt.flag)}
+                      className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border transition-colors ${
+                        modalItem.flag === opt.flag
+                          ? "border-stone-400 bg-stone-100 font-bold text-stone-900"
+                          : "border-stone-200 text-stone-500 hover:border-stone-400 hover:bg-stone-50"
+                      }`}
+                    >
+                      <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {!isPreview && (
                   <button
                     onClick={() => setDeleteConfirm({ id: modalItem.id, text: modalItem.text })}
                     className="text-[10px] font-mono text-stone-400 hover:text-rose-600 uppercase tracking-wider border border-stone-200 hover:border-rose-300 px-2.5 py-1 rounded transition-colors"
                   >
                     Delete
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         );
