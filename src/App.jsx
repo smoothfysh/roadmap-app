@@ -1478,8 +1478,10 @@ export default function RoadmapTracker() {
           const estimated     = directItems.filter((i) => i.revenueUplift != null);
           const needsEstimate = directItems.filter((i) => i.revenueUplift == null);
           const totalUplift   = estimated.reduce((s, i) => s + i.revenueUplift, 0);
-          const savedItems    = savingItems.filter((i) => i.savingAmount != null);
-          const totalSaved    = savedItems.reduce((s, i) => s + i.savingAmount, 0);
+          const reductionItems   = savingItems.filter((i) => i.savingKind !== "utilize");
+          const utilisationItems = savingItems.filter((i) => i.savingKind === "utilize");
+          const totalReduction   = reductionItems.reduce((s, i) => s + (i.savingAmount || 0), 0);
+          const totalUtilisation = utilisationItems.reduce((s, i) => s + (i.savingAmount || 0), 0);
           const doneColId     = displayData.columns[0]?.id;
 
           const itemsForCell = (teamId, tierId) => {
@@ -1530,17 +1532,21 @@ export default function RoadmapTracker() {
           const SaveCard = ({ item }) => {
             const { cleanText } = extractDate(item.text);
             const flagClass = flagStyles[item.flag] || "";
+            const isUtil = item.savingKind === "utilize";
+            const c = isUtil
+              ? { box: "border-cyan-200 border-l-cyan-500", label: "text-cyan-600", value: "text-cyan-700" }
+              : { box: "border-teal-200 border-l-teal-500", label: "text-teal-600", value: "text-teal-700" };
             return (
               <div onClick={() => setExpandedItem(item.id)}
-                className={`rounded-md border border-l-[3px] border-teal-200 border-l-teal-500 px-2.5 py-2 cursor-pointer hover:shadow-sm transition-all ${item.flag ? flagClass : "bg-white"}`}>
+                className={`rounded-md border border-l-[3px] ${c.box} px-2.5 py-2 cursor-pointer hover:shadow-sm transition-all ${item.flag ? flagClass : "bg-white"}`}>
                 <div className="flex items-start gap-1.5 mb-1">
                   {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
                   <span className="flex-1 text-xs font-semibold leading-snug text-stone-800">{cleanText}</span>
                   <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-teal-600">SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
-                  <span className="text-[10px] font-bold ml-auto text-teal-700 inline-flex items-center gap-0.5">
+                  <span className={`text-[9px] font-bold uppercase tracking-wider ${c.label}`}>SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
+                  <span className={`text-[10px] font-bold ml-auto inline-flex items-center gap-0.5 ${c.value}`}>
                     {formatUplift(item.savingAmount) || "—"}<ArrowDown className="w-2.5 h-2.5" />
                   </span>
                 </div>
@@ -1573,21 +1579,41 @@ export default function RoadmapTracker() {
                 </div>
               </div>
 
-              {/* Summary tiles */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-                {[
-                  { label: "Total Value",      value: formatUplift(totalUplift + totalSaved) || "€0", sub: "uplift + saved",                                                          accent: false },
-                  { label: "Revenue Uplift",   value: formatUplift(totalUplift) || "€0",              sub: `${estimated.length} contributor${estimated.length !== 1 ? "s" : ""}`,     accent: false },
-                  { label: "Cost Saved",       value: formatUplift(totalSaved) || "€0",               sub: `${savedItems.length} saving item${savedItems.length !== 1 ? "s" : ""}`,   accent: false },
-                  { label: "Enablers",         value: enablerItems.length,                            sub: "items unlocking revenue",                                                 accent: false },
-                  { label: "Needs Estimate",   value: needsEstimate.length,                           sub: "hidden from this view",                                                   accent: needsEstimate.length > 0 },
-                ].map(({ label, value, sub, accent }) => (
-                  <div key={label} className={`bg-white border rounded-xl px-5 py-4 ${accent ? "border-amber-300" : "border-stone-200"}`}>
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-2">{label}</div>
-                    <div className={`text-3xl font-black tracking-tight leading-none ${accent ? "text-amber-500" : "text-stone-900"}`}>{value}</div>
-                    <div className={`text-[10px] mt-1 ${accent ? "text-amber-400" : "text-stone-400"}`}>{sub}</div>
+              {/* Summary — Financial Impact (€) + Pipeline (counts) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+                {/* Financial Impact */}
+                <div className="bg-white border border-stone-200 rounded-xl px-5 py-4">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-3">Financial Impact</div>
+                  <div className="space-y-2.5">
+                    {[
+                      { dot: "bg-green-600", color: "text-green-600", label: "Revenue Uplift",   value: formatUplift(totalUplift) || "€0" },
+                      { dot: "bg-teal-500",  color: "text-teal-600",  label: "Cost Reduction",   value: formatUplift(totalReduction) || "€0" },
+                      { dot: "bg-cyan-500",  color: "text-cyan-600",  label: "Cost Utilisation", value: formatUplift(totalUtilisation) || "€0" },
+                    ].map(({ dot, color, label, value }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot}`} />
+                        <span className="text-sm text-stone-600">{label}</span>
+                        <span className={`ml-auto text-xl font-black tracking-tight ${color}`}>{value}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+                {/* Pipeline */}
+                <div className="bg-white border border-stone-200 rounded-xl px-5 py-4">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-3">Pipeline</div>
+                  <div className="space-y-2.5">
+                    {[
+                      { label: "Contributors",   value: directItems.length,  accent: false },
+                      { label: "Enablers",       value: enablerItems.length, accent: false },
+                      { label: "Needs Estimate", value: needsEstimate.length, accent: needsEstimate.length > 0 },
+                    ].map(({ label, value, accent }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="text-sm text-stone-600">{label}</span>
+                        <span className={`ml-auto text-xl font-black tracking-tight ${accent ? "text-amber-500" : "text-stone-900"}`}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Mobile: stacked tiers */}
@@ -1659,26 +1685,34 @@ export default function RoadmapTracker() {
                 ))}
               </div>
 
-              {/* Cost Savings band — separate from the revenue tiers */}
+              {/* Cost Savings band — separate from the revenue tiers, split by kind */}
               {savingItems.length > 0 && (
                 <div className="mt-8">
                   <div className="bg-teal-600 text-white rounded-t-lg px-4 py-3 flex items-center gap-3">
                     <PiggyBank className="w-4 h-4 flex-shrink-0" />
                     <span className="font-bold text-sm uppercase tracking-wide">Cost Savings</span>
                     <span className="text-xs opacity-75 hidden sm:inline">— value from reducing or fully utilising spend</span>
-                    <span className="ml-auto font-mono font-bold text-sm">{formatUplift(totalSaved) || "€0"}</span>
+                    <span className="ml-auto font-mono font-bold text-xs sm:text-sm whitespace-nowrap">
+                      Reduction {formatUplift(totalReduction) || "€0"} · Utilisation {formatUplift(totalUtilisation) || "€0"}
+                    </span>
                   </div>
-                  <div className="bg-teal-50 border border-teal-100 rounded-b-lg p-3 space-y-3">
-                    {displayData.teams.map((team) => {
-                      const teamSavings = savingItems
-                        .filter((i) => i.teamId === team.id)
-                        .sort((a, b) => (b.savingAmount || 0) - (a.savingAmount || 0));
-                      if (teamSavings.length === 0) return null;
+                  <div className="bg-teal-50 border border-teal-100 rounded-b-lg p-4 space-y-5">
+                    {[
+                      { id: "reduce",  items: reductionItems,   total: totalReduction,   dot: "bg-teal-500", label: "Cost Reduction",   labelColor: "text-teal-700", note: "removes an expense" },
+                      { id: "utilize", items: utilisationItems, total: totalUtilisation, dot: "bg-cyan-500", label: "Cost Utilisation", labelColor: "text-cyan-700", note: "makes existing spend pay off" },
+                    ].map((grp) => {
+                      if (grp.items.length === 0) return null;
+                      const sorted = [...grp.items].sort((a, b) => (b.savingAmount || 0) - (a.savingAmount || 0));
                       return (
-                        <div key={team.id}>
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700 mb-1.5">{team.name}</div>
+                        <div key={grp.id}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${grp.dot}`} />
+                            <span className={`text-[11px] font-bold uppercase tracking-wider ${grp.labelColor}`}>{grp.label}</span>
+                            <span className="text-[10px] text-stone-400 opacity-80 hidden sm:inline">— {grp.note}</span>
+                            <span className={`ml-auto text-[11px] font-mono font-bold ${grp.labelColor}`}>{formatUplift(grp.total) || "€0"}</span>
+                          </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {teamSavings.map((item) => <SaveCard key={item.id} item={item} />)}
+                            {sorted.map((item) => <SaveCard key={item.id} item={item} />)}
                           </div>
                         </div>
                       );
