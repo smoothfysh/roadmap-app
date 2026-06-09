@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, PiggyBank, ArrowDown } from "lucide-react";
 
 // ---------- Per-scope storage key (supports ?scope=name in URL) ----------
 const STORAGE_KEY = (() => {
@@ -76,6 +76,9 @@ function csvToItems(csvText) {
       revenueStream:     obj.revenueStream || null,
       enablerNote:       obj.enablerNote || null,
       enables:           (() => { try { return obj.enables ? JSON.parse(obj.enables) : null; } catch { return null; } })(),
+      savingAmount:      obj.savingAmount ? Number(obj.savingAmount) : null,
+      savingKind:        obj.savingKind || null,
+      savingArea:        obj.savingArea || null,
     };
   });
 }
@@ -94,7 +97,7 @@ function itemsToCsv(items) {
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -1468,11 +1471,15 @@ export default function RoadmapTracker() {
           const selectedCol   = displayData.columns[safeIdx];
           const allDirect     = displayData.items.filter((i) => i.revenueType === "direct");
           const allEnablers   = displayData.items.filter((i) => i.revenueType === "enabler");
+          const allSavings    = displayData.items.filter((i) => i.revenueType === "saving");
           const directItems   = allDirect.filter((i) => i.columnId === selectedCol.id);
           const enablerItems  = allEnablers.filter((i) => i.columnId === selectedCol.id);
+          const savingItems   = allSavings.filter((i) => i.columnId === selectedCol.id);
           const estimated     = directItems.filter((i) => i.revenueUplift != null);
           const needsEstimate = directItems.filter((i) => i.revenueUplift == null);
           const totalUplift   = estimated.reduce((s, i) => s + i.revenueUplift, 0);
+          const savedItems    = savingItems.filter((i) => i.savingAmount != null);
+          const totalSaved    = savedItems.reduce((s, i) => s + i.savingAmount, 0);
           const doneColId     = displayData.columns[0]?.id;
 
           const itemsForCell = (teamId, tierId) => {
@@ -1520,6 +1527,27 @@ export default function RoadmapTracker() {
             );
           };
 
+          const SaveCard = ({ item }) => {
+            const { cleanText } = extractDate(item.text);
+            const flagClass = flagStyles[item.flag] || "";
+            return (
+              <div onClick={() => setExpandedItem(item.id)}
+                className={`rounded-md border border-l-[3px] border-teal-200 border-l-teal-500 px-2.5 py-2 cursor-pointer hover:shadow-sm transition-all ${item.flag ? flagClass : "bg-white"}`}>
+                <div className="flex items-start gap-1.5 mb-1">
+                  {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
+                  <span className="flex-1 text-xs font-semibold leading-snug text-stone-800">{cleanText}</span>
+                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-teal-600">SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
+                  <span className="text-[10px] font-bold ml-auto text-teal-700 inline-flex items-center gap-0.5">
+                    {formatUplift(item.savingAmount) || "—"}<ArrowDown className="w-2.5 h-2.5" />
+                  </span>
+                </div>
+              </div>
+            );
+          };
+
           return (
             <div className="max-w-[1800px] mx-auto">
               {/* Quarter navigator */}
@@ -1546,12 +1574,13 @@ export default function RoadmapTracker() {
               </div>
 
               {/* Summary tiles */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
                 {[
-                  { label: "Total Est. Uplift",  value: formatUplift(totalUplift) || "€0",  sub: `${estimated.length} estimated item${estimated.length !== 1 ? "s" : ""}`, accent: false },
-                  { label: "Contributors",        value: directItems.length,                  sub: "direct revenue items",                                                      accent: false },
-                  { label: "Enablers",            value: enablerItems.length,                 sub: "items unlocking revenue",                                                   accent: false },
-                  { label: "Needs Estimate",      value: needsEstimate.length,                sub: "hidden from this view",                                                     accent: needsEstimate.length > 0 },
+                  { label: "Total Value",      value: formatUplift(totalUplift + totalSaved) || "€0", sub: "uplift + saved",                                                          accent: false },
+                  { label: "Revenue Uplift",   value: formatUplift(totalUplift) || "€0",              sub: `${estimated.length} contributor${estimated.length !== 1 ? "s" : ""}`,     accent: false },
+                  { label: "Cost Saved",       value: formatUplift(totalSaved) || "€0",               sub: `${savedItems.length} saving item${savedItems.length !== 1 ? "s" : ""}`,   accent: false },
+                  { label: "Enablers",         value: enablerItems.length,                            sub: "items unlocking revenue",                                                 accent: false },
+                  { label: "Needs Estimate",   value: needsEstimate.length,                           sub: "hidden from this view",                                                   accent: needsEstimate.length > 0 },
                 ].map(({ label, value, sub, accent }) => (
                   <div key={label} className={`bg-white border rounded-xl px-5 py-4 ${accent ? "border-amber-300" : "border-stone-200"}`}>
                     <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-2">{label}</div>
@@ -1629,6 +1658,34 @@ export default function RoadmapTracker() {
                   </div>
                 ))}
               </div>
+
+              {/* Cost Savings band — separate from the revenue tiers */}
+              {savingItems.length > 0 && (
+                <div className="mt-8">
+                  <div className="bg-teal-600 text-white rounded-t-lg px-4 py-3 flex items-center gap-3">
+                    <PiggyBank className="w-4 h-4 flex-shrink-0" />
+                    <span className="font-bold text-sm uppercase tracking-wide">Cost Savings</span>
+                    <span className="text-xs opacity-75 hidden sm:inline">— value from reducing or fully utilising spend</span>
+                    <span className="ml-auto font-mono font-bold text-sm">{formatUplift(totalSaved) || "€0"}</span>
+                  </div>
+                  <div className="bg-teal-50 border border-teal-100 rounded-b-lg p-3 space-y-3">
+                    {displayData.teams.map((team) => {
+                      const teamSavings = savingItems
+                        .filter((i) => i.teamId === team.id)
+                        .sort((a, b) => (b.savingAmount || 0) - (a.savingAmount || 0));
+                      if (teamSavings.length === 0) return null;
+                      return (
+                        <div key={team.id}>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700 mb-1.5">{team.name}</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {teamSavings.map((item) => <SaveCard key={item.id} item={item} />)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any item to open it and set revenue type, uplift and stream</span>}
@@ -1791,15 +1848,16 @@ export default function RoadmapTracker() {
                 const usedStreams = [...new Set(displayData.items.map((i) => i.revenueStream).filter(Boolean))];
                 return (
                   <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
-                    {/* Revenue type */}
+                    {/* Value type */}
                     <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Revenue Type</label>
+                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Value Type</label>
                       <div className="flex gap-2 flex-wrap">
-                        {[{ val: null, label: "None" }, { val: "direct", label: "Direct Contributor" }, { val: "enabler", label: "Enabler" }].map(({ val, label }) => (
+                        {[{ val: null, label: "None" }, { val: "direct", label: "Direct Contributor" }, { val: "saving", label: "Cost Saving" }, { val: "enabler", label: "Enabler" }].map(({ val, label }) => (
                           <button key={String(val)} disabled={isPreview} onClick={isPreview ? undefined : () => updateItem(modalItem.id, { revenueType: val })}
                             className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
                               modalItem.revenueType === val
                                 ? val === "direct"  ? "border-green-600 bg-green-50 text-green-800 font-bold"
+                                : val === "saving"  ? "border-teal-500 bg-teal-50 text-teal-800 font-bold"
                                 : val === "enabler" ? "border-violet-500 bg-violet-50 text-violet-800 font-bold"
                                 :                    "border-stone-400 bg-stone-100 text-stone-900 font-bold"
                                 : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
@@ -1807,6 +1865,46 @@ export default function RoadmapTracker() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Cost impact + value — saving only */}
+                    {modalItem.revenueType === "saving" && (
+                      <>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Cost Impact</label>
+                          <div className="flex gap-2 flex-wrap">
+                            {[{ val: "reduce", label: "Reduces a cost" }, { val: "utilize", label: "Utilises existing spend" }].map(({ val, label }) => (
+                              <button key={val} disabled={isPreview} onClick={isPreview ? undefined : () => updateItem(modalItem.id, { savingKind: val })}
+                                className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
+                                  modalItem.savingKind === val
+                                    ? "border-teal-500 bg-teal-50 text-teal-800 font-bold"
+                                    : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
+                                }`}>{label}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Annual Value (€)</label>
+                          <input type="number" key={modalItem.id + "-saving"}
+                            defaultValue={modalItem.savingAmount ?? ""}
+                            readOnly={isPreview}
+                            onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { savingAmount: e.target.value ? Number(e.target.value) : null })}
+                            placeholder="e.g. 240000"
+                            className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
+                          {modalItem.savingAmount && (
+                            <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.savingAmount)} in the Cost Savings band</div>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Cost Area / Vendor <span className="normal-case opacity-60">— optional</span></label>
+                          <input type="text" key={modalItem.id + "-savingarea"}
+                            defaultValue={modalItem.savingArea ?? ""}
+                            readOnly={isPreview}
+                            onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { savingArea: e.target.value.trim() || null })}
+                            placeholder="e.g. Acme Search license, manual ops"
+                            className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
+                        </div>
+                      </>
+                    )}
 
                     {/* Uplift — direct only */}
                     {modalItem.revenueType === "direct" && (
