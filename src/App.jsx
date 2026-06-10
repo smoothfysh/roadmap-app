@@ -260,6 +260,41 @@ function extractDate(text) {
   return { date: null, cleanText: text };
 }
 
+const MONTH_QUARTER = { JAN: "Q1", FEB: "Q1", MAR: "Q1", APR: "Q2", MAY: "Q2", JUN: "Q2", JUL: "Q3", AUG: "Q3", SEP: "Q3", OCT: "Q4", NOV: "Q4", DEC: "Q4" };
+
+// Quarter token (e.g. "Q2") found in a column's subtitle/title, or null.
+function getColumnQuarter(col) {
+  const m = col ? `${col.subtitle || ""} ${col.title || ""}`.match(/Q[1-4]/i) : null;
+  return m ? m[0].toUpperCase() : null;
+}
+
+// 3-letter month parsed from an item's title date (e.g. "JUN"), or null.
+function getItemMonth(text) {
+  const { date } = extractDate(text);
+  const m = date && date.match(/JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/i);
+  return m ? m[0].slice(0, 3).toUpperCase() : null;
+}
+
+// The quarter an item belongs to: its column's quarter, else a quarter in its own
+// date text, else derived from its release month (used to place DONE items in a quarter).
+function getItemQuarter(item, columns) {
+  const colQ = getColumnQuarter(columns.find((c) => c.id === item.columnId));
+  if (colQ) return colQ;
+  const { date } = extractDate(item.text);
+  const dateQ = date && date.match(/Q[1-4]/i);
+  if (dateQ) return dateQ[0].toUpperCase();
+  const month = getItemMonth(item.text);
+  return month ? MONTH_QUARTER[month] : null;
+}
+
+// Compact "Q2/JUN" (or "Q2" when there's no month) badge for the Revenue Impact cards.
+function getQuarterMonthBadge(item, columns) {
+  const quarter = getItemQuarter(item, columns);
+  const month = getItemMonth(item.text);
+  if (quarter && month) return `${quarter}/${month}`;
+  return quarter || month || null;
+}
+
 // ---------- Color tokens per column ----------
 const columnStyles = {
   green: {
@@ -677,6 +712,20 @@ export default function RoadmapTracker() {
         return { ...i, flag: newFlag, statusHistory: [...(i.statusHistory || []), entry] };
       }
       return i;
+    });
+    saveData({ ...data, items: newItems });
+  };
+
+  // Remove status-history log entries (for accidental status clicks). The item's current
+  // flag is left untouched — this only edits the log. Pass index === null to clear all.
+  const removeStatusEntry = (id, index) => {
+    const newItems = data.items.map((i) => {
+      if (i.id !== id) return i;
+      const hist = index === null
+        ? []
+        : (i.statusHistory || []).filter((_, idx) => idx !== index);
+      const { statusHistory, ...rest } = i;
+      return hist.length > 0 ? { ...rest, statusHistory: hist } : rest;
     });
     saveData({ ...data, items: newItems });
   };
@@ -1472,9 +1521,16 @@ export default function RoadmapTracker() {
           const allDirect     = displayData.items.filter((i) => i.revenueType === "direct");
           const allEnablers   = displayData.items.filter((i) => i.revenueType === "enabler");
           const allSavings    = displayData.items.filter((i) => i.revenueType === "saving");
-          const directItems   = allDirect.filter((i) => i.columnId === selectedCol.id);
-          const enablerItems  = allEnablers.filter((i) => i.columnId === selectedCol.id);
-          const savingItems   = allSavings.filter((i) => i.columnId === selectedCol.id);
+          const doneColId     = displayData.columns[0]?.id;
+          const selQuarter    = getColumnQuarter(selectedCol);
+          // An item belongs to the selected timeline if it sits in that column, or if it's
+          // a DONE item whose release date falls in the selected quarter.
+          const inTimeline = (i) =>
+            i.columnId === selectedCol.id ||
+            (selQuarter != null && i.columnId === doneColId && getItemQuarter(i, displayData.columns) === selQuarter);
+          const directItems   = allDirect.filter(inTimeline);
+          const enablerItems  = allEnablers.filter(inTimeline);
+          const savingItems   = allSavings.filter(inTimeline);
           const estimated     = directItems.filter((i) => i.revenueUplift != null);
           const needsEstimate = directItems.filter((i) => i.revenueUplift == null);
           const totalUplift   = estimated.reduce((s, i) => s + i.revenueUplift, 0);
@@ -1482,7 +1538,6 @@ export default function RoadmapTracker() {
           const utilisationItems = savingItems.filter((i) => i.savingKind === "utilize");
           const totalReduction   = reductionItems.reduce((s, i) => s + (i.savingAmount || 0), 0);
           const totalUtilisation = utilisationItems.reduce((s, i) => s + (i.savingAmount || 0), 0);
-          const doneColId     = displayData.columns[0]?.id;
 
           const itemsForCell = (teamId, tierId) => {
             if (tierId === "gray")
@@ -1494,6 +1549,7 @@ export default function RoadmapTracker() {
           const RevCard = ({ item, tier }) => {
             const { cleanText } = extractDate(item.text);
             const flagClass = flagStyles[item.flag] || "";
+            const badge = getQuarterMonthBadge(item, displayData.columns);
             if (tier.id === "gray") {
               const enabledStreams = [...new Set((item.enables || [])
                 .map((id) => displayData.items.find((i) => i.id === id)?.revenueStream).filter(Boolean))];
@@ -1509,7 +1565,10 @@ export default function RoadmapTracker() {
                     {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded mr-1 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
                     {cleanText}
                   </div>
-                  {item.enablerNote && <div className="text-[10px] text-stone-400 italic leading-snug">{item.enablerNote}</div>}
+                  <div className="flex items-center gap-2">
+                    {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
+                    {item.enablerNote && <span className="text-[10px] text-stone-400 italic leading-snug">{item.enablerNote}</span>}
+                  </div>
                 </div>
               );
             }
@@ -1522,8 +1581,9 @@ export default function RoadmapTracker() {
                   <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
                 </div>
                 <div className="flex items-center gap-2">
-                  {item.revenueStream && <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400">{item.revenueStream}</span>}
-                  <span className={`text-[10px] font-bold ml-auto ${tier.valueColor}`}>{formatUplift(item.revenueUplift)}</span>
+                  {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
+                  {item.revenueStream && <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400 truncate">{item.revenueStream}</span>}
+                  <span className={`text-[10px] font-bold ml-auto flex-shrink-0 ${tier.valueColor}`}>{formatUplift(item.revenueUplift)}</span>
                 </div>
               </div>
             );
@@ -1532,6 +1592,7 @@ export default function RoadmapTracker() {
           const SaveCard = ({ item }) => {
             const { cleanText } = extractDate(item.text);
             const flagClass = flagStyles[item.flag] || "";
+            const badge = getQuarterMonthBadge(item, displayData.columns);
             const isUtil = item.savingKind === "utilize";
             const c = isUtil
               ? { box: "border-cyan-200 border-l-cyan-500", label: "text-cyan-600", value: "text-cyan-700" }
@@ -1545,8 +1606,9 @@ export default function RoadmapTracker() {
                   <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[9px] font-bold uppercase tracking-wider ${c.label}`}>SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
-                  <span className={`text-[10px] font-bold ml-auto inline-flex items-center gap-0.5 ${c.value}`}>
+                  {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
+                  <span className={`text-[9px] font-bold uppercase tracking-wider truncate ${c.label}`}>SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
+                  <span className={`text-[10px] font-bold ml-auto inline-flex items-center gap-0.5 flex-shrink-0 ${c.value}`}>
                     {formatUplift(item.savingAmount) || "—"}<ArrowDown className="w-2.5 h-2.5" />
                   </span>
                 </div>
@@ -2023,15 +2085,35 @@ export default function RoadmapTracker() {
               {modalItem.statusHistory?.length > 0 && (
                 <div className="px-5 pb-4">
                   <div className="border-t border-stone-100 pt-3">
-                    <div className="text-[9px] font-mono uppercase tracking-wider text-stone-400 mb-2">Status history</div>
+                    <div className="flex items-center mb-2">
+                      <div className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Status history</div>
+                      {!isPreview && (
+                        <button
+                          onClick={() => removeStatusEntry(modalItem.id, null)}
+                          className="ml-auto text-[9px] font-mono uppercase tracking-wider text-stone-400 hover:text-rose-600 transition-colors"
+                          title="Clear the entire status history"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                     <div className="space-y-1.5">
-                      {[...modalItem.statusHistory].reverse().slice(0, 8).map((entry, i) => (
-                        <div key={i} className="flex items-center gap-2">
+                      {modalItem.statusHistory.map((entry, idx) => ({ entry, idx })).reverse().slice(0, 8).map(({ entry, idx }) => (
+                        <div key={idx} className="group flex items-center gap-2">
                           <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${entry.flag ? `fill-current ${FLAG_COLORS[entry.flag]}` : "text-stone-300"}`} />
                           <span className={`text-[11px] font-mono font-semibold flex-shrink-0 ${entry.flag ? FLAG_COLORS[entry.flag] : "text-stone-400"}`}>
                             {FLAG_LABELS[entry.flag] || "On Track"}
                           </span>
                           <span className="text-[10px] text-stone-400 ml-auto flex-shrink-0">{formatHistoryDate(entry.at)}</span>
+                          {!isPreview && (
+                            <button
+                              onClick={() => removeStatusEntry(modalItem.id, idx)}
+                              className="flex-shrink-0 text-stone-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all"
+                              title="Remove this entry"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
