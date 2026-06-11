@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, PiggyBank, ArrowDown } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, PiggyBank, ArrowDown, Repeat } from "lucide-react";
 import { version } from "../package.json";
 
 // Single app-wide version shown in every tab footer — sourced from package.json.
@@ -84,6 +84,7 @@ function csvToItems(csvText) {
       savingAmount:      obj.savingAmount ? Number(obj.savingAmount) : null,
       savingKind:        obj.savingKind || null,
       savingArea:        obj.savingArea || null,
+      cadence:           obj.cadence || null,
     };
   });
 }
@@ -102,7 +103,7 @@ function itemsToCsv(items) {
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -298,6 +299,36 @@ function getQuarterMonthBadge(item, columns) {
   const month = getItemMonth(item.text);
   if (quarter && month) return `${quarter}/${month}`;
   return quarter || month || null;
+}
+
+// One-time vs recurring picker for an item's revenue uplift / cost saving (field: `cadence`).
+function CadenceToggle({ value, disabled, onSelect }) {
+  const opts = [
+    { val: "once",      label: "One-time",  icon: <span className="font-bold text-[11px] leading-none">1×</span> },
+    { val: "recurring", label: "Recurring", icon: <Repeat className="w-3 h-3" /> },
+  ];
+  return (
+    <div className="flex gap-2">
+      {opts.map((o) => (
+        <button key={o.val} disabled={disabled}
+          onClick={disabled ? undefined : () => onSelect(value === o.val ? null : o.val)}
+          className={`inline-flex items-center gap-1.5 text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
+            value === o.val
+              ? "border-stone-400 bg-stone-100 text-stone-900 font-bold"
+              : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
+          }`}>
+          {o.icon}{o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Tiny inline marker shown on Revenue Impact cards next to the € value.
+function CadenceMark({ cadence }) {
+  if (cadence === "recurring") return <Repeat className="w-2.5 h-2.5 opacity-60 flex-shrink-0" aria-label="Recurring" />;
+  if (cadence === "once")      return <span className="text-[8px] font-bold leading-none opacity-60 flex-shrink-0" aria-label="One-time">1×</span>;
+  return null;
 }
 
 // ---------- Color tokens per column ----------
@@ -1588,7 +1619,10 @@ export default function RoadmapTracker() {
                 <div className="flex items-center gap-2">
                   {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
                   {item.revenueStream && <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400 truncate">{item.revenueStream}</span>}
-                  <span className={`text-[10px] font-bold ml-auto flex-shrink-0 ${tier.valueColor}`}>{formatUplift(item.revenueUplift)}</span>
+                  <span className={`ml-auto inline-flex items-center gap-1 flex-shrink-0 ${tier.valueColor}`} title={item.cadence === "recurring" ? "Recurring" : item.cadence === "once" ? "One-time" : undefined}>
+                    <CadenceMark cadence={item.cadence} />
+                    <span className="text-[10px] font-bold">{formatUplift(item.revenueUplift)}</span>
+                  </span>
                 </div>
               </div>
             );
@@ -1613,7 +1647,8 @@ export default function RoadmapTracker() {
                 <div className="flex items-center gap-2">
                   {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
                   <span className={`text-[9px] font-bold uppercase tracking-wider truncate ${c.label}`}>SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
-                  <span className={`text-[10px] font-bold ml-auto inline-flex items-center gap-0.5 flex-shrink-0 ${c.value}`}>
+                  <span className={`text-[10px] font-bold ml-auto inline-flex items-center gap-1 flex-shrink-0 ${c.value}`} title={item.cadence === "recurring" ? "Recurring" : item.cadence === "once" ? "One-time" : undefined}>
+                    <CadenceMark cadence={item.cadence} />
                     {formatUplift(item.savingAmount) || "—"}<ArrowDown className="w-2.5 h-2.5" />
                   </span>
                 </div>
@@ -1984,7 +2019,7 @@ export default function RoadmapTracker() {
                           </div>
                         </div>
                         <div>
-                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Annual Value (€)</label>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Value (€)</label>
                           <input type="number" key={modalItem.id + "-saving"}
                             defaultValue={modalItem.savingAmount ?? ""}
                             readOnly={isPreview}
@@ -1994,6 +2029,11 @@ export default function RoadmapTracker() {
                           {modalItem.savingAmount && (
                             <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.savingAmount)} in the Cost Savings band</div>
                           )}
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Frequency</label>
+                          <CadenceToggle value={modalItem.cadence} disabled={isPreview}
+                            onSelect={(v) => updateItem(modalItem.id, { cadence: v })} />
                         </div>
                         <div>
                           <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Cost Area / Vendor <span className="normal-case opacity-60">— optional</span></label>
@@ -2020,6 +2060,15 @@ export default function RoadmapTracker() {
                         {modalItem.revenueUplift && (
                           <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.revenueUplift)} — determines which tier column this item appears in</div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Frequency — direct only */}
+                    {modalItem.revenueType === "direct" && (
+                      <div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Frequency</label>
+                        <CadenceToggle value={modalItem.cadence} disabled={isPreview}
+                          onSelect={(v) => updateItem(modalItem.id, { cadence: v })} />
                       </div>
                     )}
 
