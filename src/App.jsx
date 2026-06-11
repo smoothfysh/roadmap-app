@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, PiggyBank, ArrowDown } from "lucide-react";
+import { version } from "../package.json";
+
+// Single app-wide version shown in every tab footer — sourced from package.json.
+// Bump the "version" field there on significant changes.
+const APP_VERSION = `v${version}`;
 
 // ---------- Per-scope storage key (supports ?scope=name in URL) ----------
 const STORAGE_KEY = (() => {
@@ -1092,7 +1097,7 @@ export default function RoadmapTracker() {
                 </div>
 
                 {/* Column Body */}
-                <div className={`${styles.body} flex-1 rounded-b-lg p-3 space-y-4 min-h-[400px]`}>
+                <div className={`${styles.body} flex-1 rounded-b-lg p-3 space-y-5 min-h-[400px]`}>
                   {displayData.teams.map((team) => {
                     const teamItems = displayData.items.filter(
                       (i) => i.columnId === col.id && i.teamId === team.id
@@ -1354,7 +1359,7 @@ export default function RoadmapTracker() {
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}
-          <span className="ml-auto opacity-40">v3.0.0</span>
+          <span className="ml-auto opacity-40">{APP_VERSION}</span>
         </div>
         </>}
 
@@ -1509,7 +1514,7 @@ export default function RoadmapTracker() {
             {/* Strategic footer */}
             <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
               {!isPreview && <span><span className="font-bold">Click</span> any item to open it and assign a strategic category</span>}
-              <span className="ml-auto opacity-40">v1.3.0</span>
+              <span className="ml-auto opacity-40">{APP_VERSION}</span>
             </div>
           </div>
         )}
@@ -1785,7 +1790,7 @@ export default function RoadmapTracker() {
 
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any item to open it and set revenue type, uplift and stream</span>}
-                <span className="ml-auto opacity-40">v1.3.0</span>
+                <span className="ml-auto opacity-40">{APP_VERSION}</span>
               </div>
             </div>
           );

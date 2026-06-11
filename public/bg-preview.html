@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Background animation preview</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --stone-50:  #fafaf9;
+    --overlay:   0.55;   /* tint strength over the video */
+    --blur:      0px;    /* backdrop blur on the board */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    color: #1c1917;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* ---- background video layer ---- */
+  #bg-video {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -2;
+  }
+  /* readability tint sitting on top of the video */
+  #bg-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--stone-50);
+    opacity: var(--overlay);
+    transition: opacity .2s ease;
+  }
+
+  /* ---- mock board (a stand-in for the real app) ---- */
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  header.app { margin-bottom: 22px; }
+  header.app h1 { font-size: 28px; font-weight: 700; margin: 0 0 4px; }
+  header.app p  { margin: 0; color: #57534e; font-size: 14px; }
+
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+  .col {
+    border-radius: 14px;
+    overflow: hidden;
+    backdrop-filter: blur(var(--blur));
+    -webkit-backdrop-filter: blur(var(--blur));
+    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+  }
+  .col .head { padding: 10px 12px; font-weight: 600; font-size: 14px; }
+  .col .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 220px; }
+
+  .card {
+    background: #fff;
+    border: 1px solid;
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 13px;
+    line-height: 1.35;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 5px; margin-right: 6px;
+    background: #e7e5e4; color: #44403c; vertical-align: middle;
+  }
+
+  /* column palettes lifted from the app's columnStyles */
+  .green .head { background:#34d399; color:#022c22; }  .green .body { background:#ecfdf5cc; } .green .card { border-color:#a7f3d0; }
+  .blue  .head { background:#7dd3fc; color:#082f49; }  .blue  .body { background:#f0f9ffcc; } .blue  .card { border-color:#bae6fd; }
+  .amber .head { background:#fcd34d; color:#451a03; }  .amber .body { background:#f5f3ffcc; } .amber .card { border-color:#ddd6fe; }
+  .rose  .head { background:#fda4af; color:#4c0519; }  .rose  .body { background:#fffbebcc; } .rose  .card { border-color:#fde68a; }
+
+  /* ---- floating control panel (not part of the real app) ---- */
+  .controls {
+    position: fixed; top: 14px; right: 14px; z-index: 10;
+    background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
+    border: 1px solid #e7e5e4; border-radius: 12px;
+    padding: 14px 16px; width: 240px; font-size: 13px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.15);
+  }
+  .controls h2 { margin: 0 0 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color:#78716c; }
+  .controls label { display:block; margin: 10px 0 4px; font-weight:600; }
+  .controls input[type=range] { width: 100%; }
+  .controls .val { float: right; font-weight: 400; color:#78716c; }
+  .controls .note { margin-top: 12px; font-size: 11px; color:#78716c; line-height:1.4; }
+</style>
+</head>
+<body>
+  <video id="bg-video" autoplay loop muted playsinline>
+    <source src="strand_remix_scene.webm" type="video/webm" />
+    <source src="strand_remix_scene.mp4"  type="video/mp4" />
+  </video>
+  <div id="bg-overlay"></div>
+
+  <aside class="controls">
+    <h2>Preview controls</h2>
+    <label>Tint strength <span class="val" id="ovVal">55%</span></label>
+    <input type="range" id="ov" min="0" max="100" value="55" />
+    <label>Board blur <span class="val" id="blVal">0px</span></label>
+    <input type="range" id="bl" min="0" max="14" value="0" />
+    <p class="note">Drag the sliders to find a readable balance. Whatever you settle on, tell me the two numbers and I'll bake them into the app.</p>
+  </aside>
+
+  <div class="wrap">
+    <header class="app">
+      <h1>Team Roadmap</h1>
+      <p>Background animation preview — mock content, not the live board.</p>
+    </header>
+
+    <div class="board">
+      <div class="col green">
+        <div class="head">Now</div>
+        <div class="body">
+          <div class="card"><span class="tag">FR</span>Checkout redesign rollout — Mid APR</div>
+          <div class="card"><span class="tag">DE</span>Search relevance tuning</div>
+          <div class="card">Mobile photo upload flow</div>
+        </div>
+      </div>
+      <div class="col blue">
+        <div class="head">Next</div>
+        <div class="body">
+          <div class="card"><span class="tag">AT</span>Saved searches v2</div>
+          <div class="card">Agent dashboard metrics</div>
+          <div class="card"><span class="tag">FR</span>Lead routing rules — Q3 2026</div>
+        </div>
+      </div>
+      <div class="col amber">
+        <div class="head">Later</div>
+        <div class="body">
+          <div class="card">Map clustering performance</div>
+          <div class="card"><span class="tag">DE</span>Notification preferences</div>
+        </div>
+      </div>
+      <div class="col rose">
+        <div class="head">Exploring</div>
+        <div class="body">
+          <div class="card">AI listing descriptions</div>
+          <div class="card"><span class="tag">FR</span>Energy rating filters</div>
+          <div class="card">Neighbourhood insights</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ov = document.getElementById('ov');
+    const bl = document.getElementById('bl');
+    const ovVal = document.getElementById('ovVal');
+    const blVal = document.getElementById('blVal');
+    const root = document.documentElement;
+    ov.addEventListener('input', () => {
+      root.style.setProperty('--overlay', ov.value / 100);
+      ovVal.textContent = ov.value + '%';
+    });
+    bl.addEventListener('input', () => {
+      root.style.setProperty('--blur', bl.value + 'px');
+      blVal.textContent = bl.value + 'px';
+    });
+  </script>
+</body>
+</html>
