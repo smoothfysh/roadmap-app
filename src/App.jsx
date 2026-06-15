@@ -290,6 +290,16 @@ function getItemDisplay(item) {
   return { pill, cleanText };
 }
 
+// First working day of the quarter that `iso` falls in, e.g. "2026-06-15" -> "2026-04-01".
+// If the 1st of the quarter's first month is a weekend, roll forward to the Monday.
+function quarterStartWorkingDay(iso) {
+  const [y, m] = iso.split("-").map(Number);
+  const qMonth = Math.floor((m - 1) / 3) * 3 + 1; // 1, 4, 7 or 10
+  const dow = new Date(y, qMonth - 1, 1).getDay(); // 0=Sun … 6=Sat
+  const day = dow === 0 ? 2 : dow === 6 ? 3 : 1;   // Sun→Mon(2nd), Sat→Mon(3rd)
+  return `${y}-${String(qMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 // Quarter token (e.g. "Q2") found in a column's subtitle/title, or null.
 function getColumnQuarter(col) {
   const m = col ? `${col.subtitle || ""} ${col.title || ""}`.match(/Q[1-4]/i) : null;
@@ -1897,12 +1907,22 @@ export default function RoadmapTracker() {
         {activeView === "gantt" && (() => {
           const LABEL = GANTT_LABEL_W, COL = ganttColW;
           const ymKey = (iso) => { const [y, m] = iso.split("-").map(Number); return y * 12 + (m - 1); };
+          const dayOf = (iso) => Number(iso.split("-")[2]) || 1;
+          // Day-of-month snapped to quarter slots. Start = left edge of its slot, End = right edge.
+          const startFrac = (d) => (d <= 8 ? 0    : d <= 15 ? 0.25 : d <= 23 ? 0.5  : 0.75);
+          const endFrac   = (d) => (d <= 8 ? 0.25 : d <= 15 ? 0.5  : d <= 23 ? 0.75 : 1);
+          // Fractional month position: each item's bar runs from startPos → endPos (in month units).
           const scheduled = displayData.items
             .map((it) => {
-              const sK = it.startDate ? ymKey(it.startDate) : null;
-              const eK = it.endDate ? ymKey(it.endDate) : null;
-              const start = sK ?? eK, end = eK ?? sK;
-              return (start != null && end != null) ? { it, start: Math.min(start, end), end: Math.max(start, end) } : null;
+              // No start date → default to the first working day of the end date's quarter.
+              const sIso = it.startDate || (it.endDate ? quarterStartWorkingDay(it.endDate) : null);
+              const eIso = it.endDate || it.startDate;
+              if (!sIso || !eIso) return null;
+              let a = ymKey(sIso) + startFrac(dayOf(sIso));
+              let b = ymKey(eIso) + endFrac(dayOf(eIso));
+              if (b < a) { const t = a; a = b - 0.25; b = t; } // guard reversed dates
+              if (b - a < 0.25) b = a + 0.25;                  // keep a visible minimum
+              return { it, startPos: a, endPos: b };
             })
             .filter(Boolean);
           const unscheduled = displayData.items.filter((it) => !it.startDate && !it.endDate);
@@ -1944,13 +1964,20 @@ export default function RoadmapTracker() {
             );
           }
 
-          const minK = Math.min(...scheduled.map((x) => x.start));
-          const maxK = Math.max(...scheduled.map((x) => x.end));
+          const minK = Math.floor(Math.min(...scheduled.map((x) => x.startPos)));
+          const maxK = Math.ceil(Math.max(...scheduled.map((x) => x.endPos))) - 1;
           const months = [];
           for (let k = minK; k <= maxK; k++) months.push({ y: Math.floor(k / 12), m: (k % 12) + 1 });
           const N = months.length;
           const years = [];
           months.forEach((mo, i) => { const g = years[years.length - 1]; if (g && g.y === mo.y) g.count++; else years.push({ y: mo.y, start: i, count: 1 }); });
+          const quarters = [];
+          months.forEach((mo, i) => {
+            const q = Math.floor((mo.m - 1) / 3) + 1;
+            const g = quarters[quarters.length - 1];
+            if (g && g.y === mo.y && g.q === q) g.count++;
+            else quarters.push({ y: mo.y, q, start: i, count: 1 });
+          });
           const gridCols = `repeat(${N}, ${COL}px)`;
 
           return (
@@ -1974,6 +2001,15 @@ export default function RoadmapTracker() {
                   </div>
                 </div>
                 <div className="flex">
+                  <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0" style={{ width: LABEL, height: 22 }} />
+                  <div style={{ display: "grid", gridTemplateColumns: gridCols }}>
+                    {quarters.map((g, i) => (
+                      <div key={i} style={{ gridColumn: `${g.start + 1} / span ${g.count}`, height: 22 }}
+                        className="flex items-center justify-center text-[10px] font-mono font-bold uppercase tracking-wider text-stone-500 bg-stone-100/70 border-r border-stone-200">Q{g.q}</div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex">
                   <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center px-3" style={{ width: LABEL, height: 26 }}>
                     <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Team / Month</span>
                   </div>
@@ -1992,20 +2028,22 @@ export default function RoadmapTracker() {
                 {displayData.teams.map((team) => {
                   const teamRows = scheduled.filter((x) => x.it.teamId === team.id);
                   return (
-                    <div key={team.id} className="flex border-b border-stone-200 last:border-b-0">
+                    <div key={team.id} className="flex border-b border-stone-200 last:border-b-0" style={{ width: LABEL + N * COL }}>
                       <div className="sticky left-0 z-20 bg-stone-100 border-r border-stone-200 flex-shrink-0 flex items-center px-3 text-[11px] font-bold uppercase tracking-wide text-stone-800 leading-tight" style={{ width: LABEL }}>
                         {team.name}
                       </div>
                       <div className="flex-shrink-0" style={{ width: N * COL, backgroundImage: `repeating-linear-gradient(to right, transparent 0, transparent ${COL - 1}px, #f5f5f4 ${COL - 1}px, #f5f5f4 ${COL}px)` }}>
                         {teamRows.length === 0 ? (
                           <div style={{ height: 34 }} />
-                        ) : teamRows.map(({ it, start, end }) => {
+                        ) : teamRows.map(({ it, startPos, endPos }) => {
                           const { cleanText } = getItemDisplay(it);
+                          const left = (startPos - minK) * COL;
+                          const width = (endPos - startPos) * COL;
                           return (
-                            <div key={it.id} style={{ display: "grid", gridTemplateColumns: gridCols, height: 34 }} className="items-center">
+                            <div key={it.id} className="relative" style={{ height: 34 }}>
                               <div onClick={() => setExpandedItem(it.id)} title={cleanText}
-                                style={{ gridColumn: `${start - minK + 1} / ${end - minK + 2}` }}
-                                className={`mx-[3px] h-6 rounded-md flex items-center px-2 text-[10px] font-semibold overflow-hidden whitespace-nowrap cursor-pointer shadow-sm hover:brightness-105 transition ${barCls(it.flag)}`}>
+                                style={{ position: "absolute", top: 5, left: left + 2, width: Math.max(8, width - 4) }}
+                                className={`h-6 rounded-md flex items-center px-2 text-[10px] font-semibold overflow-hidden whitespace-nowrap cursor-pointer shadow-sm hover:brightness-105 transition ${barCls(it.flag)}`}>
                                 {it.tag && <span className="font-bold mr-1 opacity-90">{it.tag}</span>}{cleanText}
                               </div>
                             </div>
