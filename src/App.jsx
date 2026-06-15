@@ -924,9 +924,9 @@ export default function RoadmapTracker() {
       if (s != null) starts.push(s);
     });
     if (!starts.length) return;
-    const minK = Math.min(...starts);
     const now = new Date();
     const prevQuarterStartKey = now.getFullYear() * 12 + (Math.floor(now.getMonth() / 3) * 3 - 3);
+    const minK = Math.min(Math.min(...starts), prevQuarterStartKey);
     el.scrollLeft = Math.max(0, (prevQuarterStartKey - minK) * ganttColW);
   }, [activeView, ganttColW]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1964,8 +1964,16 @@ export default function RoadmapTracker() {
             );
           }
 
-          const minK = Math.floor(Math.min(...scheduled.map((x) => x.startPos)));
-          const maxK = Math.ceil(Math.max(...scheduled.map((x) => x.endPos))) - 1;
+          const itemsMinK = Math.floor(Math.min(...scheduled.map((x) => x.startPos)));
+          const itemsMaxK = Math.ceil(Math.max(...scheduled.map((x) => x.endPos))) - 1;
+          // Always show at least the prev/current/next-quarter window (9 months), even if
+          // no items fall in those months; extend further to cover any out-of-window items.
+          const gNow = new Date();
+          const gQ = Math.floor(gNow.getMonth() / 3);
+          const windowStart = gNow.getFullYear() * 12 + (gQ * 3 - 3);
+          const windowEnd = gNow.getFullYear() * 12 + (gQ * 3 + 5);
+          const minK = Math.min(itemsMinK, windowStart);
+          const maxK = Math.max(itemsMaxK, windowEnd);
           const months = [];
           for (let k = minK; k <= maxK; k++) months.push({ y: Math.floor(k / 12), m: (k % 12) + 1 });
           const N = months.length;
