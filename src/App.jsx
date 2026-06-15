@@ -85,6 +85,8 @@ function csvToItems(csvText) {
       savingKind:        obj.savingKind || null,
       savingArea:        obj.savingArea || null,
       cadence:           obj.cadence || null,
+      startDate:         obj.startDate || null,
+      endDate:           obj.endDate || null,
     };
   });
 }
@@ -103,7 +105,7 @@ function itemsToCsv(items) {
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -266,7 +268,27 @@ function extractDate(text) {
   return { date: null, cleanText: text };
 }
 
+const MONTHS_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const GANTT_LABEL_W = 190;        // sticky team-label column width (px)
+const GANTT_VISIBLE_MONTHS = 9;   // prev + current + next quarter fill the viewport
+const GANTT_MIN_COL = 60;         // floor so months stay readable on small screens
 const MONTH_QUARTER = { JAN: "Q1", FEB: "Q1", MAR: "Q1", APR: "Q2", MAY: "Q2", JUN: "Q2", JUL: "Q3", AUG: "Q3", SEP: "Q3", OCT: "Q4", NOV: "Q4", DEC: "Q4" };
+
+// "2026-06-15" -> "15 JUN" (the due-date pill). Null for empty/invalid input.
+function formatDatePill(iso) {
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d || m < 1 || m > 12) return null;
+  return `${d} ${MONTHS_ABBR[m - 1]}`;
+}
+
+// Due-date pill + clean title for an item. Prefers the End date; falls back to a
+// date parsed out of the title (legacy items / published JSONs that embed the date).
+function getItemDisplay(item) {
+  const { date, cleanText } = extractDate(item.text);
+  const pill = (item.endDate && formatDatePill(item.endDate)) || date;
+  return { pill, cleanText };
+}
 
 // Quarter token (e.g. "Q2") found in a column's subtitle/title, or null.
 function getColumnQuarter(col) {
@@ -274,29 +296,33 @@ function getColumnQuarter(col) {
   return m ? m[0].toUpperCase() : null;
 }
 
-// 3-letter month parsed from an item's title date (e.g. "JUN"), or null.
-function getItemMonth(text) {
-  const { date } = extractDate(text);
+// 3-letter month for an item: from its End date if set, else from its title date.
+function getItemMonth(item) {
+  if (item.endDate) {
+    const mm = Number(item.endDate.split("-")[1]);
+    if (mm >= 1 && mm <= 12) return MONTHS_ABBR[mm - 1];
+  }
+  const { date } = extractDate(item.text);
   const m = date && date.match(/JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/i);
   return m ? m[0].slice(0, 3).toUpperCase() : null;
 }
 
-// The quarter an item belongs to: its column's quarter, else a quarter in its own
-// date text, else derived from its release month (used to place DONE items in a quarter).
+// The quarter an item belongs to: its column's quarter, else derived from its End
+// date / title date (used to place DONE items in a quarter and build the badge).
 function getItemQuarter(item, columns) {
   const colQ = getColumnQuarter(columns.find((c) => c.id === item.columnId));
   if (colQ) return colQ;
+  const month = getItemMonth(item);
+  if (month) return MONTH_QUARTER[month];
   const { date } = extractDate(item.text);
   const dateQ = date && date.match(/Q[1-4]/i);
-  if (dateQ) return dateQ[0].toUpperCase();
-  const month = getItemMonth(item.text);
-  return month ? MONTH_QUARTER[month] : null;
+  return dateQ ? dateQ[0].toUpperCase() : null;
 }
 
 // Compact "Q2/JUN" (or "Q2" when there's no month) badge for the Revenue Impact cards.
 function getQuarterMonthBadge(item, columns) {
   const quarter = getItemQuarter(item, columns);
-  const month = getItemMonth(item.text);
+  const month = getItemMonth(item);
   if (quarter && month) return `${quarter}/${month}`;
   return quarter || month || null;
 }
@@ -412,7 +438,8 @@ export default function RoadmapTracker() {
   const [expandedItem, setExpandedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
   const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
-  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue"
+  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue" | "gantt"
+  const [ganttColW, setGanttColW] = useState(96); // month column width, sized so ~9 months fill the viewport
   const [modalTab, setModalTab] = useState("details"); // "details" | "revenue"
   const [revenueColIdx, setRevenueColIdx] = useState(1); // index into displayData.columns for quarter filter
   const [editingSubtitle, setEditingSubtitle] = useState(null);
@@ -427,6 +454,8 @@ export default function RoadmapTracker() {
   const [locationError, setLocationError] = useState(false);
   const fileInputRef = useRef(null);
   const backupInputRef = useRef(null);
+  const ganttHeaderRef = useRef(null);
+  const ganttBodyRef = useRef(null);
 
   // Load from localStorage if available, else fetch CSV seed
   useEffect(() => {
@@ -858,6 +887,39 @@ export default function RoadmapTracker() {
   const displayData = sharedPreview ?? data;
   const isPreview = !!sharedPreview;
 
+  // Gantt: size month columns so ~9 months (prev/current/next quarter) fill the viewport width.
+  useEffect(() => {
+    if (activeView !== "gantt") return;
+    const el = ganttBodyRef.current;
+    if (!el) return;
+    const compute = () => {
+      const avail = el.clientWidth - GANTT_LABEL_W;
+      if (avail > 0) setGanttColW(Math.max(GANTT_MIN_COL, Math.floor(avail / GANTT_VISIBLE_MONTHS)));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [activeView]);
+
+  // Gantt: on open, scroll so the previous quarter sits at the left edge.
+  useEffect(() => {
+    if (activeView !== "gantt") return;
+    const el = ganttBodyRef.current;
+    if (!el) return;
+    const keyOf = (iso) => { const [y, m] = iso.split("-").map(Number); return y * 12 + (m - 1); };
+    const starts = [];
+    displayData.items.forEach((it) => {
+      const s = it.startDate ? keyOf(it.startDate) : (it.endDate ? keyOf(it.endDate) : null);
+      if (s != null) starts.push(s);
+    });
+    if (!starts.length) return;
+    const minK = Math.min(...starts);
+    const now = new Date();
+    const prevQuarterStartKey = now.getFullYear() * 12 + (Math.floor(now.getMonth() / 3) * 3 - 3);
+    el.scrollLeft = Math.max(0, (prevQuarterStartKey - minK) * ganttColW);
+  }, [activeView, ganttColW]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
@@ -1080,7 +1142,7 @@ export default function RoadmapTracker() {
 
         {/* View tabs */}
         <div className="max-w-[1800px] mx-auto flex gap-1 border-b border-stone-200 mb-6">
-          {[{ id: "roadmap", label: "By Time" }, { id: "strategic", label: "By Innovation Type" }, { id: "revenue", label: "By Revenue Impact" }].map(({ id, label }) => (
+          {[{ id: "roadmap", label: "By Time" }, { id: "strategic", label: "By Innovation Type" }, { id: "revenue", label: "By Revenue Impact" }, { id: "gantt", label: "Gantt" }].map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setActiveView(id)}
@@ -1201,7 +1263,7 @@ export default function RoadmapTracker() {
                           {teamItems.map((item) => {
                             const isDragOver = dragOverId === item.id;
                             const flagClass = flagStyles[item.flag] || "";
-                            const { date, cleanText } = extractDate(item.text);
+                            const { pill, cleanText } = getItemDisplay(item);
                             const isExpanded = expandedItem === item.id;
                             return (
                               <div
@@ -1231,9 +1293,9 @@ export default function RoadmapTracker() {
                                   )}
                                   <span className="flex-1 leading-snug flex flex-wrap items-center gap-1 min-w-0">
                                     <span className="truncate">{cleanText}</span>
-                                    {date && (
+                                    {pill && (
                                       <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">
-                                        {date}
+                                        {pill}
                                       </span>
                                     )}
                                   </span>
@@ -1830,13 +1892,147 @@ export default function RoadmapTracker() {
             </div>
           );
         })()}
+
+        {/* ── Gantt view ── */}
+        {activeView === "gantt" && (() => {
+          const LABEL = GANTT_LABEL_W, COL = ganttColW;
+          const ymKey = (iso) => { const [y, m] = iso.split("-").map(Number); return y * 12 + (m - 1); };
+          const scheduled = displayData.items
+            .map((it) => {
+              const sK = it.startDate ? ymKey(it.startDate) : null;
+              const eK = it.endDate ? ymKey(it.endDate) : null;
+              const start = sK ?? eK, end = eK ?? sK;
+              return (start != null && end != null) ? { it, start: Math.min(start, end), end: Math.max(start, end) } : null;
+            })
+            .filter(Boolean);
+          const unscheduled = displayData.items.filter((it) => !it.startDate && !it.endDate);
+
+          const barCls = (flag) =>
+            flag === "warning" ? "bg-amber-400 text-amber-950"
+            : flag === "risk" ? "bg-rose-500 text-white"
+            : flag === "completed" ? "bg-emerald-500 text-white"
+            : flag === "done" ? "bg-stone-400 text-white"
+            : "bg-sky-500 text-white";
+
+          const UnscheduledStrip = () => (unscheduled.length === 0 ? null : (
+            <div className="mt-4 bg-white border border-dashed border-stone-300 rounded-xl px-4 py-3">
+              <div className="text-[9px] font-mono uppercase tracking-wider text-stone-400 mb-2">Unscheduled — no start/end date set ({unscheduled.length})</div>
+              <div className="flex flex-wrap gap-2">
+                {unscheduled.map((it) => {
+                  const { cleanText } = getItemDisplay(it);
+                  return (
+                    <button key={it.id} onClick={() => setExpandedItem(it.id)}
+                      className="text-[11px] bg-stone-100 border border-stone-200 rounded px-2 py-1 hover:border-stone-400 transition-colors">
+                      {it.tag && <span className="font-bold">{it.tag}: </span>}{cleanText}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ));
+
+          if (scheduled.length === 0) {
+            return (
+              <div className="max-w-[1400px] mx-auto">
+                <div className="bg-white border border-stone-200 rounded-xl px-6 py-10 text-center">
+                  <div className="text-sm font-bold text-stone-700 mb-1">Nothing scheduled yet</div>
+                  <div className="text-xs text-stone-400">Open an item and set a <span className="font-semibold">Start</span> / <span className="font-semibold">End</span> date to place it on the Gantt.</div>
+                </div>
+                <UnscheduledStrip />
+                <div className="mt-6 text-xs text-stone-500 font-mono flex items-center"><span className="ml-auto opacity-40">{APP_VERSION}</span></div>
+              </div>
+            );
+          }
+
+          const minK = Math.min(...scheduled.map((x) => x.start));
+          const maxK = Math.max(...scheduled.map((x) => x.end));
+          const months = [];
+          for (let k = minK; k <= maxK; k++) months.push({ y: Math.floor(k / 12), m: (k % 12) + 1 });
+          const N = months.length;
+          const years = [];
+          months.forEach((mo, i) => { const g = years[years.length - 1]; if (g && g.y === mo.y) g.count++; else years.push({ y: mo.y, start: i, count: 1 }); });
+          const gridCols = `repeat(${N}, ${COL}px)`;
+
+          return (
+            <div className="max-w-[1400px] mx-auto">
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs mb-3">
+                {[["On Track", "bg-sky-500"], ["At Risk", "bg-amber-400"], ["Blocked", "bg-rose-500"], ["Done", "bg-emerald-500"], ["Deprioritised", "bg-stone-400"]].map(([lbl, cls]) => (
+                  <span key={lbl} className="flex items-center gap-1.5"><span className={`w-3 h-3 rounded ${cls}`} />{lbl}</span>
+                ))}
+              </div>
+
+              {/* Pinned header (syncs horizontally with the body) */}
+              <div ref={ganttHeaderRef} className="sticky top-0 z-30 overflow-hidden border border-b-0 border-stone-200 rounded-t-xl bg-white">
+                <div className="flex">
+                  <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0" style={{ width: LABEL, height: 30 }} />
+                  <div style={{ display: "grid", gridTemplateColumns: gridCols }}>
+                    {years.map((g) => (
+                      <div key={g.y} style={{ gridColumn: `${g.start + 1} / span ${g.count}`, height: 30 }}
+                        className="flex items-center justify-center text-xs font-black uppercase tracking-wider text-stone-600 bg-stone-50 border-r border-stone-200">{g.y}</div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex">
+                  <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center px-3" style={{ width: LABEL, height: 26 }}>
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Team / Month</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: gridCols }}>
+                    {months.map((mo, i) => (
+                      <div key={i} className={`flex items-center justify-center text-[10px] font-mono font-semibold text-stone-500 bg-white border-r ${mo.m % 3 === 0 ? "border-stone-200" : "border-stone-100"}`} style={{ height: 26 }}>{MONTHS_ABBR[mo.m - 1]}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Body — scrolls horizontally; page handles vertical scroll */}
+              <div ref={ganttBodyRef}
+                onScroll={(e) => { if (ganttHeaderRef.current) ganttHeaderRef.current.scrollLeft = e.currentTarget.scrollLeft; }}
+                className="overflow-x-auto border border-stone-200 rounded-b-xl bg-white">
+                {displayData.teams.map((team) => {
+                  const teamRows = scheduled.filter((x) => x.it.teamId === team.id);
+                  return (
+                    <div key={team.id} className="flex border-b border-stone-200 last:border-b-0">
+                      <div className="sticky left-0 z-20 bg-stone-100 border-r border-stone-200 flex-shrink-0 flex items-center px-3 text-[11px] font-bold uppercase tracking-wide text-stone-800 leading-tight" style={{ width: LABEL }}>
+                        {team.name}
+                      </div>
+                      <div className="flex-shrink-0" style={{ width: N * COL, backgroundImage: `repeating-linear-gradient(to right, transparent 0, transparent ${COL - 1}px, #f5f5f4 ${COL - 1}px, #f5f5f4 ${COL}px)` }}>
+                        {teamRows.length === 0 ? (
+                          <div style={{ height: 34 }} />
+                        ) : teamRows.map(({ it, start, end }) => {
+                          const { cleanText } = getItemDisplay(it);
+                          return (
+                            <div key={it.id} style={{ display: "grid", gridTemplateColumns: gridCols, height: 34 }} className="items-center">
+                              <div onClick={() => setExpandedItem(it.id)} title={cleanText}
+                                style={{ gridColumn: `${start - minK + 1} / ${end - minK + 2}` }}
+                                className={`mx-[3px] h-6 rounded-md flex items-center px-2 text-[10px] font-semibold overflow-hidden whitespace-nowrap cursor-pointer shadow-sm hover:brightness-105 transition ${barCls(it.flag)}`}>
+                                {it.tag && <span className="font-bold mr-1 opacity-90">{it.tag}</span>}{cleanText}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <UnscheduledStrip />
+
+              <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
+                {!isPreview && <span><span className="font-bold">Click</span> any bar to open the item · set Start/End dates in the modal</span>}
+                <span className="ml-auto opacity-40">{APP_VERSION}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Item modal */}
       {expandedItem && (() => {
         const modalItem = displayData.items.find((i) => i.id === expandedItem);
         if (!modalItem) return null;
-        const { date, cleanText } = extractDate(modalItem.text);
+        const { pill, cleanText } = getItemDisplay(modalItem);
         return (
           <div
             className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-6 z-50"
@@ -1862,9 +2058,9 @@ export default function RoadmapTracker() {
                         {modalItem.tag}
                       </span>
                     )}
-                    {date && (
+                    {pill && (
                       <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm">
-                        {date}
+                        {pill}
                       </span>
                     )}
                   </div>
@@ -1908,6 +2104,29 @@ export default function RoadmapTracker() {
                     onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
                     className={`w-full text-xs border border-stone-300 rounded px-2 py-1 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`}
                   />
+                </div>
+                <div>
+                  <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">
+                    Timeline <span className="normal-case opacity-60">— End date sets the due pill &amp; places the item on the Gantt</span>
+                  </label>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-[9px] text-stone-400 block mb-1">Start</label>
+                      <input type="date" key={modalItem.id + "-start"}
+                        defaultValue={modalItem.startDate ?? ""}
+                        disabled={isPreview}
+                        onChange={isPreview ? undefined : (e) => updateItem(modalItem.id, { startDate: e.target.value || null })}
+                        className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100 text-stone-500" : "bg-white"}`} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[9px] text-stone-400 block mb-1">End (due)</label>
+                      <input type="date" key={modalItem.id + "-end"}
+                        defaultValue={modalItem.endDate ?? ""}
+                        disabled={isPreview}
+                        onChange={isPreview ? undefined : (e) => updateItem(modalItem.id, { endDate: e.target.value || null })}
+                        className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100 text-stone-500" : "bg-white"}`} />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Strategic Category</label>
