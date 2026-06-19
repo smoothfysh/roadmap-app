@@ -193,23 +193,23 @@ function formatUplift(val) {
 }
 
 // ---------- Outcome metric helpers (the "by IMPACT" view) ----------
-// Icon + chip colour per outcome type. Dashed border marks qualitative (enabler) outcomes.
+// An item's outcome has two independent axes that can both be set at once:
+//   1. a quantified VALUE — Revenue (€), a KPI Metric, or a Cost Saving (mutually exclusive)
+//   2. an ENABLES/SUPPORTS note — what it unlocks: a strategic KR or another topic (free text)
+// Icon + chip colour per outcome flavour. Dashed border marks the qualitative enables chip.
 const OUTCOME_STYLES = {
-  direct:    { icon: "💶", chip: "border-green-200 bg-green-50 text-green-800" },
-  metric:    { icon: "📈", chip: "border-sky-200 bg-sky-50 text-sky-800" },
-  enabler:   { icon: "🔓", chip: "border-violet-200 bg-violet-50 text-violet-800 border-dashed" },
-  strategic: { icon: "🎯", chip: "border-amber-200 bg-amber-50 text-amber-800" },
-  saving:    { icon: "💰", chip: "border-teal-200 bg-teal-50 text-teal-800" },
+  direct:  { icon: "💶", chip: "border-green-200 bg-green-50 text-green-800" },
+  metric:  { icon: "📈", chip: "border-sky-200 bg-sky-50 text-sky-800" },
+  saving:  { icon: "💰", chip: "border-teal-200 bg-teal-50 text-teal-800" },
+  enables: { icon: "🔓", chip: "border-violet-200 bg-violet-50 text-violet-800 border-dashed" },
 };
 
-// € outcome type labels + active-button styling, reused by the modal type picker.
-const OUTCOME_TYPES = [
-  { val: null,        label: "None",          active: "border-stone-400 bg-stone-100 text-stone-900" },
-  { val: "direct",    label: "💶 Revenue",     active: "border-green-600 bg-green-50 text-green-800"  },
-  { val: "metric",    label: "📈 Metric",      active: "border-sky-500 bg-sky-50 text-sky-800"        },
-  { val: "enabler",   label: "🔓 Enabler",     active: "border-violet-500 bg-violet-50 text-violet-800" },
-  { val: "strategic", label: "🎯 Strategic",   active: "border-amber-500 bg-amber-50 text-amber-800"  },
-  { val: "saving",    label: "💰 Cost Saving", active: "border-teal-500 bg-teal-50 text-teal-800"     },
+// Quantified value-type labels + active-button styling, used by the modal value-type picker.
+const VALUE_TYPES = [
+  { val: null,     label: "None",          active: "border-stone-400 bg-stone-100 text-stone-900" },
+  { val: "direct", label: "💶 Revenue",     active: "border-green-600 bg-green-50 text-green-800"  },
+  { val: "metric", label: "📈 Metric",      active: "border-sky-500 bg-sky-50 text-sky-800"        },
+  { val: "saving", label: "💰 Cost Saving", active: "border-teal-500 bg-teal-50 text-teal-800"     },
 ];
 
 // Cadence → trailing suffix shown after a € amount on the outcome chip.
@@ -227,31 +227,30 @@ function formatRange(min, max) {
   return `${a}–${b}`;
 }
 
-// The outcome chip for an item → { icon, chip, label?, value?, suffix? }, or null when nothing is set.
+// All outcome chips for an item → array of { icon, chip, label?, value?, suffix? }.
+// May contain a value chip and/or an "enables" chip; empty array when nothing is set.
 // Shared by the "by IMPACT" board and the modal live preview so both always agree.
-function formatOutcome(item) {
+function outcomeChips(item) {
+  const chips = [];
   const t = item.revenueType;
-  const base = OUTCOME_STYLES[t];
-  if (!base) return null;
   if (t === "direct") {
     const value = formatRange(item.revenueUplift, item.outcomeMax);
-    return value ? { ...base, value, suffix: CADENCE_SUFFIX[item.cadence] || null } : null;
-  }
-  if (t === "saving") {
+    if (value) chips.push({ ...OUTCOME_STYLES.direct, value, suffix: CADENCE_SUFFIX[item.cadence] || null });
+  } else if (t === "saving") {
     const value = formatUplift(item.savingAmount);
-    return value ? { ...base, value: `${value} saved`, suffix: CADENCE_SUFFIX[item.cadence] || null } : null;
-  }
-  if (t === "metric") {
-    if (!item.metricName) return null;
+    if (value) chips.push({ ...OUTCOME_STYLES.saving, value: `${value} saved`, suffix: CADENCE_SUFFIX[item.cadence] || null });
+  } else if (t === "metric" && item.metricName) {
     const arrow = item.metricDir === "down" ? "↓" : "↑";
     const sign  = item.metricDir === "down" ? "−" : "+";
     const unit  = item.metricUnit === "x" ? "×" : (item.metricUnit || "");
     const value = item.metricValue != null ? `${sign}${item.metricValue}${unit}` : null;
-    return { ...base, label: `${arrow} ${item.metricName}`, value };
+    chips.push({ ...OUTCOME_STYLES.metric, label: `${arrow} ${item.metricName}`, value });
   }
-  if (t === "enabler")   return item.enablerNote   ? { ...base, label: item.enablerNote }   : null;
-  if (t === "strategic") return item.strategicNote ? { ...base, label: item.strategicNote } : null;
-  return null;
+  // enablerNote is the merged "enables / supports" note; fall back to the legacy strategicNote
+  // field so old share links / scope JSONs that predate the merge still render their chip.
+  const note = item.enablerNote || item.strategicNote;
+  if (note) chips.push({ ...OUTCOME_STYLES.enables, label: note });
+  return chips;
 }
 
 // ---------- Strategic view categories ----------
@@ -632,6 +631,16 @@ export default function RoadmapTracker() {
               parsed.teams.push({ id, name: id.toUpperCase().replace(/[-_]/g, " ") })
             );
           }
+          // Migrate: the legacy "enabler"/"strategic" outcome types are merged into the
+          // free-text "enables / supports" note (enablerNote). Value types are now only
+          // direct/metric/saving, so these items lose their value type but keep the note.
+          parsed.items = parsed.items.map((i) =>
+            i.revenueType === "strategic"
+              ? { ...i, revenueType: null, enablerNote: i.enablerNote || i.strategicNote || null, strategicNote: null }
+              : i.revenueType === "enabler"
+              ? { ...i, revenueType: null }
+              : i
+          );
           setData(parsed);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
           setLoading(false);
@@ -1680,7 +1689,7 @@ export default function RoadmapTracker() {
             (selQuarter != null && i.columnId === doneColId && getItemQuarter(i, displayData.columns) === selQuarter);
           // Exclude deprioritised items (the "done" flag → "Deprioritised") from this view.
           const timelineItems = displayData.items.filter((i) => i.flag !== "done" && inTimeline(i));
-          const withOutcome   = timelineItems.filter((i) => formatOutcome(i)).length;
+          const withOutcome   = timelineItems.filter((i) => outcomeChips(i).length > 0).length;
 
           const flagDot = (flag) =>
             flag === "risk" ? "fill-rose-500 text-rose-500"
@@ -1690,8 +1699,8 @@ export default function RoadmapTracker() {
             : "text-stone-200";
 
           const OutcomeCell = ({ item }) => {
-            const o = formatOutcome(item);
-            if (!o) {
+            const chips = outcomeChips(item);
+            if (chips.length === 0) {
               return (
                 <button
                   disabled={isPreview}
@@ -1703,12 +1712,16 @@ export default function RoadmapTracker() {
               );
             }
             return (
-              <span className={`inline-flex items-center gap-2 text-[12px] px-2.5 py-1 rounded-md border ${o.chip}`}>
-                <span>{o.icon}</span>
-                {o.label && <span className="font-semibold leading-snug">{o.label}</span>}
-                {o.value && <span className="font-mono font-bold whitespace-nowrap">{o.value}</span>}
-                {o.suffix && <span className="text-[10px] uppercase tracking-wider opacity-70 whitespace-nowrap">{o.suffix}</span>}
-              </span>
+              <div className="flex flex-col items-start gap-1.5">
+                {chips.map((o, idx) => (
+                  <span key={idx} className={`inline-flex items-center gap-2 text-[12px] px-2.5 py-1 rounded-md border ${o.chip}`}>
+                    <span>{o.icon}</span>
+                    {o.label && <span className="font-semibold leading-snug">{o.label}</span>}
+                    {o.value && <span className="font-mono font-bold whitespace-nowrap">{o.value}</span>}
+                    {o.suffix && <span className="text-[10px] uppercase tracking-wider opacity-70 whitespace-nowrap">{o.suffix}</span>}
+                  </span>
+                ))}
+              </div>
             );
           };
 
@@ -2128,22 +2141,17 @@ export default function RoadmapTracker() {
               </div>
               )}{/* end details tab */}
 
-              {/* Modal body — Revenue tab */}
+              {/* Modal body — Outcome Metric tab */}
               {modalTab === "outcome" && (() => {
-                const doneColId = displayData.columns[0]?.id;
-                const directNotDone = displayData.items.filter((i) =>
-                  i.revenueType === "direct" && i.columnId !== doneColId && i.id !== modalItem.id
-                );
-                const usedStreams = [...new Set(displayData.items.map((i) => i.revenueStream).filter(Boolean))];
                 const usedMetrics = [...new Set(displayData.items.map((i) => i.metricName).filter(Boolean))];
-                const preview = formatOutcome(modalItem);
+                const previewChips = outcomeChips(modalItem);
                 return (
                   <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
-                    {/* Outcome type */}
+                    {/* Value type — the quantified part (mutually exclusive) */}
                     <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Outcome Type</label>
+                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Value Type <span className="normal-case opacity-60">— how this is measured</span></label>
                       <div className="flex gap-2 flex-wrap">
-                        {OUTCOME_TYPES.map(({ val, label, active }) => (
+                        {VALUE_TYPES.map(({ val, label, active }) => (
                           <button key={String(val)} disabled={isPreview} onClick={isPreview ? undefined : () => updateItem(modalItem.id, { revenueType: val })}
                             className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
                               modalItem.revenueType === val
@@ -2154,22 +2162,22 @@ export default function RoadmapTracker() {
                       </div>
                     </div>
 
-                    {/* Live preview — exactly what shows in the "by IMPACT" column */}
-                    {modalItem.revenueType && (
-                      <div className="rounded-md bg-stone-50 border border-stone-200 px-3 py-2 flex items-center gap-2 flex-wrap">
-                        <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Preview</span>
-                        {preview ? (
-                          <span className={`inline-flex items-center gap-2 text-[12px] px-2.5 py-1 rounded-md border ${preview.chip}`}>
-                            <span>{preview.icon}</span>
-                            {preview.label && <span className="font-semibold">{preview.label}</span>}
-                            {preview.value && <span className="font-mono font-bold">{preview.value}</span>}
-                            {preview.suffix && <span className="text-[10px] uppercase tracking-wider opacity-70">{preview.suffix}</span>}
+                    {/* Live preview — exactly what shows in the "by IMPACT" column (value + enables chips) */}
+                    <div className="rounded-md bg-stone-50 border border-stone-200 px-3 py-2 flex items-center gap-2 flex-wrap">
+                      <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Preview</span>
+                      {previewChips.length > 0 ? (
+                        previewChips.map((c, idx) => (
+                          <span key={idx} className={`inline-flex items-center gap-2 text-[12px] px-2.5 py-1 rounded-md border ${c.chip}`}>
+                            <span>{c.icon}</span>
+                            {c.label && <span className="font-semibold">{c.label}</span>}
+                            {c.value && <span className="font-mono font-bold">{c.value}</span>}
+                            {c.suffix && <span className="text-[10px] uppercase tracking-wider opacity-70">{c.suffix}</span>}
                           </span>
-                        ) : (
-                          <span className="text-[11px] text-stone-400 italic">Fill in the fields below — the chip updates when you click out of a field</span>
-                        )}
-                      </div>
-                    )}
+                        ))
+                      ) : (
+                        <span className="text-[11px] text-stone-400 italic">Set a value type or an "enables" note below — chips update when you click out of a field</span>
+                      )}
+                    </div>
 
                     {/* Cost impact + value — saving only */}
                     {modalItem.revenueType === "saving" && (
@@ -2196,7 +2204,7 @@ export default function RoadmapTracker() {
                             placeholder="e.g. 240000"
                             className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
                           {modalItem.savingAmount && (
-                            <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.savingAmount)} in the Cost Savings band</div>
+                            <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.savingAmount)} on the chip</div>
                           )}
                         </div>
                         <div>
@@ -2236,7 +2244,7 @@ export default function RoadmapTracker() {
                             className="flex-1 min-w-0 text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
                         </div>
                         {modalItem.revenueUplift != null && (
-                          <div className="text-[9px] text-stone-400 mt-1">Shows as {formatRange(modalItem.revenueUplift, modalItem.outcomeMax)} — the lower value sets the Revenue Impact tier column</div>
+                          <div className="text-[9px] text-stone-400 mt-1">Shows as {formatRange(modalItem.revenueUplift, modalItem.outcomeMax)} on the chip</div>
                         )}
                       </div>
                     )}
@@ -2246,7 +2254,7 @@ export default function RoadmapTracker() {
                       <div>
                         <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Cadence</label>
                         <div className="flex gap-2 flex-wrap">
-                          {[{ v: "once", l: "One-time" }, { v: "incremental", l: "Incremental" }, { v: "month", l: "Per month" }, { v: "year", l: "Per year" }].map(({ v, l }) => (
+                          {[{ v: "once", l: "One-time" }, { v: "month", l: "Per month" }, { v: "year", l: "Per year" }].map(({ v, l }) => (
                             <button key={v} disabled={isPreview}
                               onClick={isPreview ? undefined : () => updateItem(modalItem.id, { cadence: modalItem.cadence === v ? null : v })}
                               className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
@@ -2256,66 +2264,6 @@ export default function RoadmapTracker() {
                               }`}>{l}</button>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    {/* Stream — direct only */}
-                    {modalItem.revenueType === "direct" && (
-                      <div>
-                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Stream</label>
-                        <input type="text" list="stream-datalist" key={modalItem.id + "-stream"}
-                          defaultValue={modalItem.revenueStream ?? ""}
-                          readOnly={isPreview}
-                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { revenueStream: e.target.value.trim() || null })}
-                          placeholder="e.g. SCHUFA, Financing leads, Onsite ads…"
-                          className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
-                        <datalist id="stream-datalist">
-                          {usedStreams.map((s) => <option key={s} value={s} />)}
-                        </datalist>
-                      </div>
-                    )}
-
-                    {/* Enabler note — enabler only */}
-                    {modalItem.revenueType === "enabler" && (
-                      <div>
-                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Enabler Note</label>
-                        <input type="text" key={modalItem.id + "-note"}
-                          defaultValue={modalItem.enablerNote ?? ""}
-                          readOnly={isPreview}
-                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { enablerNote: e.target.value.trim() || null })}
-                          placeholder="What does this unlock and why does it matter?"
-                          className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
-                      </div>
-                    )}
-
-                    {/* Enables checklist — enabler only */}
-                    {modalItem.revenueType === "enabler" && (
-                      <div>
-                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">
-                          Enables <span className="normal-case opacity-60">— direct contributors not yet done</span>
-                        </label>
-                        {directNotDone.length === 0 ? (
-                          <div className="text-[10px] text-stone-400 italic">No direct contributors to link yet — mark other items as Direct Contributor first</div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {directNotDone.map((item) => {
-                              const { cleanText } = extractDate(item.text);
-                              const col = displayData.columns.find((c) => c.id === item.columnId);
-                              const checked = (modalItem.enables || []).includes(item.id);
-                              return (
-                                <label key={item.id} className={`flex items-center gap-2 group ${isPreview ? "" : "cursor-pointer"}`}>
-                                  <input type="checkbox" checked={checked} readOnly={isPreview} onChange={isPreview ? undefined : (e) => {
-                                    const current = modalItem.enables || [];
-                                    const updated = e.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id);
-                                    updateItem(modalItem.id, { enables: updated.length > 0 ? updated : null });
-                                  }} className="rounded" />
-                                  <span className="text-xs text-stone-700 group-hover:text-stone-900 flex-1 leading-snug">{cleanText}</span>
-                                  {col && <span className="text-[9px] text-stone-400 font-mono flex-shrink-0">{col.subtitle || col.title}</span>}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -2368,18 +2316,18 @@ export default function RoadmapTracker() {
                       </>
                     )}
 
-                    {/* Strategic (OKR / KR) — strategic only */}
-                    {modalItem.revenueType === "strategic" && (
-                      <div>
-                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Supports / contributes to</label>
-                        <input type="text" key={modalItem.id + "-strategic"}
-                          defaultValue={modalItem.strategicNote ?? ""}
-                          readOnly={isPreview}
-                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { strategicNote: e.target.value.trim() || null })}
-                          placeholder="e.g. KR7 + Reducing churn, Enabler for KR6"
-                          className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
-                      </div>
-                    )}
+                    {/* Enables / Supports — always available, independent of the value type above */}
+                    <div className="border-t border-stone-100 pt-4">
+                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
+                        Enables / Supports <span className="normal-case opacity-60">— what this unlocks: a strategic KR, or another topic (optional, shows alongside any value above)</span>
+                      </label>
+                      <input type="text" key={modalItem.id + "-enables"}
+                        defaultValue={modalItem.enablerNote ?? ""}
+                        readOnly={isPreview}
+                        onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { enablerNote: e.target.value.trim() || null })}
+                        placeholder="e.g. KR7 + Reducing churn, Enabler for KR6, better fraud detection"
+                        className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
+                    </div>
                   </div>
                 );
               })()}
