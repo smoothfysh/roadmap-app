@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, PiggyBank, ArrowDown, Repeat } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat } from "lucide-react";
 import { version } from "../package.json";
 
 // Single app-wide version shown in every tab footer — sourced from package.json.
@@ -90,6 +90,12 @@ function csvToItems(csvText) {
       cadence:           obj.cadence || null,
       startDate:         obj.startDate || null,
       endDate:           obj.endDate || null,
+      outcomeMax:        obj.outcomeMax ? Number(obj.outcomeMax) : null,
+      metricName:        obj.metricName || null,
+      metricDir:         obj.metricDir || null,
+      metricValue:       obj.metricValue ? Number(obj.metricValue) : null,
+      metricUnit:        obj.metricUnit || null,
+      strategicNote:     obj.strategicNote || null,
     };
   });
 }
@@ -108,7 +114,7 @@ function itemsToCsv(items) {
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate", "outcomeMax", "metricName", "metricDir", "metricValue", "metricUnit", "strategicNote"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -186,21 +192,67 @@ function formatUplift(val) {
   return `€${val}`;
 }
 
-function getRevenueTier(uplift) {
-  if (uplift == null)          return null;
-  if (uplift >= 1_000_000)     return "purple";
-  if (uplift >= 500_000)       return "green";
-  if (uplift >= 100_000)       return "blue";
-  return "amber";
+// ---------- Outcome metric helpers (the "by IMPACT" view) ----------
+// Icon + chip colour per outcome type. Dashed border marks qualitative (enabler) outcomes.
+const OUTCOME_STYLES = {
+  direct:    { icon: "💶", chip: "border-green-200 bg-green-50 text-green-800" },
+  metric:    { icon: "📈", chip: "border-sky-200 bg-sky-50 text-sky-800" },
+  enabler:   { icon: "🔓", chip: "border-violet-200 bg-violet-50 text-violet-800 border-dashed" },
+  strategic: { icon: "🎯", chip: "border-amber-200 bg-amber-50 text-amber-800" },
+  saving:    { icon: "💰", chip: "border-teal-200 bg-teal-50 text-teal-800" },
+};
+
+// € outcome type labels + active-button styling, reused by the modal type picker.
+const OUTCOME_TYPES = [
+  { val: null,        label: "None",          active: "border-stone-400 bg-stone-100 text-stone-900" },
+  { val: "direct",    label: "💶 Revenue",     active: "border-green-600 bg-green-50 text-green-800"  },
+  { val: "metric",    label: "📈 Metric",      active: "border-sky-500 bg-sky-50 text-sky-800"        },
+  { val: "enabler",   label: "🔓 Enabler",     active: "border-violet-500 bg-violet-50 text-violet-800" },
+  { val: "strategic", label: "🎯 Strategic",   active: "border-amber-500 bg-amber-50 text-amber-800"  },
+  { val: "saving",    label: "💰 Cost Saving", active: "border-teal-500 bg-teal-50 text-teal-800"     },
+];
+
+// Cadence → trailing suffix shown after a € amount on the outcome chip.
+const CADENCE_SUFFIX = { once: "one-time", recurring: "recurring", month: "/ month", year: "/ year", incremental: "incremental" };
+const METRIC_UNITS   = ["%", "pp", "#", "x"];
+
+// Format a € amount or a min–max range, sharing the K/M suffix when possible: (10000, 25000) -> "€10–25K".
+function formatRange(min, max) {
+  if (min == null) return null;
+  if (max == null || max === min) return formatUplift(min);
+  const a = formatUplift(min), b = formatUplift(max);
+  const sa = (a.match(/[KM]$/) || [])[0];
+  const sb = (b.match(/[KM]$/) || [])[0];
+  if (sa && sa === sb) return `${a.replace(/[KM]$/, "")}–${b.replace("€", "")}`;
+  return `${a}–${b}`;
 }
 
-const REVENUE_TIERS = [
-  { id: "purple", label: "€1M+",        sub: "Top-tier bets",      headerBg: "bg-violet-500", headerText: "text-white",        bodyBg: "bg-violet-50",  valueColor: "text-violet-600" },
-  { id: "green",  label: "€500K–€999K", sub: "Solid contributors", headerBg: "bg-green-700",  headerText: "text-white",        bodyBg: "bg-green-50",   valueColor: "text-green-700"  },
-  { id: "blue",   label: "€100K–€499K", sub: "Steady wins",        headerBg: "bg-sky-500",    headerText: "text-white",        bodyBg: "bg-sky-50",     valueColor: "text-sky-600"    },
-  { id: "amber",  label: "Under €100K", sub: "Small contributors",  headerBg: "bg-amber-400",  headerText: "text-amber-950",    bodyBg: "bg-amber-50",   valueColor: "text-amber-600"  },
-  { id: "gray",   label: "Enablers",    sub: "Unlock revenue",     headerBg: "bg-stone-300",  headerText: "text-stone-700",    bodyBg: "bg-stone-50",   valueColor: "text-stone-500"  },
-];
+// The outcome chip for an item → { icon, chip, label?, value?, suffix? }, or null when nothing is set.
+// Shared by the "by IMPACT" board and the modal live preview so both always agree.
+function formatOutcome(item) {
+  const t = item.revenueType;
+  const base = OUTCOME_STYLES[t];
+  if (!base) return null;
+  if (t === "direct") {
+    const value = formatRange(item.revenueUplift, item.outcomeMax);
+    return value ? { ...base, value, suffix: CADENCE_SUFFIX[item.cadence] || null } : null;
+  }
+  if (t === "saving") {
+    const value = formatUplift(item.savingAmount);
+    return value ? { ...base, value: `${value} saved`, suffix: CADENCE_SUFFIX[item.cadence] || null } : null;
+  }
+  if (t === "metric") {
+    if (!item.metricName) return null;
+    const arrow = item.metricDir === "down" ? "↓" : "↑";
+    const sign  = item.metricDir === "down" ? "−" : "+";
+    const unit  = item.metricUnit === "x" ? "×" : (item.metricUnit || "");
+    const value = item.metricValue != null ? `${sign}${item.metricValue}${unit}` : null;
+    return { ...base, label: `${arrow} ${item.metricName}`, value };
+  }
+  if (t === "enabler")   return item.enablerNote   ? { ...base, label: item.enablerNote }   : null;
+  if (t === "strategic") return item.strategicNote ? { ...base, label: item.strategicNote } : null;
+  return null;
+}
 
 // ---------- Strategic view categories ----------
 const STRATEGIC_CATEGORIES = [
@@ -332,14 +384,6 @@ function getItemQuarter(item, columns) {
   return dateQ ? dateQ[0].toUpperCase() : null;
 }
 
-// Compact "Q2/JUN" (or "Q2" when there's no month) badge for the Revenue Impact cards.
-function getQuarterMonthBadge(item, columns) {
-  const quarter = getItemQuarter(item, columns);
-  const month = getItemMonth(item);
-  if (quarter && month) return `${quarter}/${month}`;
-  return quarter || month || null;
-}
-
 // One-time vs recurring picker for an item's revenue uplift / cost saving (field: `cadence`).
 function CadenceToggle({ value, disabled, onSelect }) {
   const opts = [
@@ -361,13 +405,6 @@ function CadenceToggle({ value, disabled, onSelect }) {
       ))}
     </div>
   );
-}
-
-// Tiny inline marker shown on Revenue Impact cards next to the € value.
-function CadenceMark({ cadence }) {
-  if (cadence === "recurring") return <Repeat className="w-2.5 h-2.5 opacity-60 flex-shrink-0" aria-label="Recurring" />;
-  if (cadence === "once")      return <span className="text-[8px] font-bold leading-none opacity-60 flex-shrink-0" aria-label="One-time">1×</span>;
-  return null;
 }
 
 // ---------- Color tokens per column ----------
@@ -451,10 +488,11 @@ export default function RoadmapTracker() {
   const [expandedItem, setExpandedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
   const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
-  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue" | "gantt"
+  const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue" | "impact" | "gantt"
   const [ganttColW, setGanttColW] = useState(96); // month column width, sized so ~9 months fill the viewport
-  const [modalTab, setModalTab] = useState("details"); // "details" | "revenue"
-  const [revenueColIdx, setRevenueColIdx] = useState(1); // index into displayData.columns for quarter filter
+  const [modalTab, setModalTab] = useState("details"); // "details" | "outcome"
+  const initialModalTabRef = useRef("details"); // tab to land on when the modal next opens (reset after use)
+  const [impactColIdx, setImpactColIdx] = useState(1);   // index into displayData.columns for the "by IMPACT" quarter navigator
   const [editingSubtitle, setEditingSubtitle] = useState(null);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -627,7 +665,8 @@ export default function RoadmapTracker() {
 
   useEffect(() => {
     if (!expandedItem) return;
-    setModalTab("details");
+    setModalTab(initialModalTabRef.current || "details");
+    initialModalTabRef.current = "details";
     const handler = (e) => { if (e.key === "Escape") setExpandedItem(null); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -1158,7 +1197,7 @@ export default function RoadmapTracker() {
 
         {/* View tabs */}
         <div className="max-w-[1800px] mx-auto flex gap-1 border-b border-stone-200 mb-6">
-          {[{ id: "roadmap", label: "By Time" }, { id: "strategic", label: "By Innovation Type" }, { id: "revenue", label: "By Revenue Impact" }, { id: "gantt", label: "Gantt" }].map(({ id, label }) => (
+          {[{ id: "roadmap", label: "By Time" }, { id: "strategic", label: "By Innovation Type" }, { id: "impact", label: "by IMPACT" }, { id: "gantt", label: "Gantt" }].map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setActiveView(id)}
@@ -1628,119 +1667,58 @@ export default function RoadmapTracker() {
           </div>
         )}
 
-        {/* ── Revenue Impact view ── */}
-        {activeView === "revenue" && (() => {
-          const safeIdx       = Math.min(revenueColIdx, displayData.columns.length - 1);
-          const selectedCol   = displayData.columns[safeIdx];
-          const allDirect     = displayData.items.filter((i) => i.revenueType === "direct");
-          const allEnablers   = displayData.items.filter((i) => i.revenueType === "enabler");
-          const allSavings    = displayData.items.filter((i) => i.revenueType === "saving");
-          const doneColId     = displayData.columns[0]?.id;
-          const selQuarter    = getColumnQuarter(selectedCol);
-          // An item belongs to the selected timeline if it sits in that column, or if it's
-          // a DONE item whose release date falls in the selected quarter.
+        {/* ── by IMPACT view ── */}
+        {activeView === "impact" && (() => {
+          const safeIdx     = Math.min(impactColIdx, displayData.columns.length - 1);
+          const selectedCol = displayData.columns[safeIdx];
+          const doneColId   = displayData.columns[0]?.id;
+          const selQuarter  = getColumnQuarter(selectedCol);
+          // Same timeline rule as the Revenue view: an item belongs to the selected quarter if
+          // it sits in that column, or it's a DONE item whose release date falls in that quarter.
           const inTimeline = (i) =>
             i.columnId === selectedCol.id ||
             (selQuarter != null && i.columnId === doneColId && getItemQuarter(i, displayData.columns) === selQuarter);
-          const directItems   = allDirect.filter(inTimeline);
-          const enablerItems  = allEnablers.filter(inTimeline);
-          const savingItems   = allSavings.filter(inTimeline);
-          const estimated     = directItems.filter((i) => i.revenueUplift != null);
-          const needsEstimate = directItems.filter((i) => i.revenueUplift == null);
-          const totalUplift   = estimated.reduce((s, i) => s + i.revenueUplift, 0);
-          const reductionItems   = savingItems.filter((i) => i.savingKind !== "utilize");
-          const utilisationItems = savingItems.filter((i) => i.savingKind === "utilize");
-          const totalReduction   = reductionItems.reduce((s, i) => s + (i.savingAmount || 0), 0);
-          const totalUtilisation = utilisationItems.reduce((s, i) => s + (i.savingAmount || 0), 0);
+          // Exclude deprioritised items (the "done" flag → "Deprioritised") from this view.
+          const timelineItems = displayData.items.filter((i) => i.flag !== "done" && inTimeline(i));
+          const withOutcome   = timelineItems.filter((i) => formatOutcome(i)).length;
 
-          const itemsForCell = (teamId, tierId) => {
-            if (tierId === "gray")
-              return enablerItems.filter((i) => i.teamId === teamId);
-            return estimated.filter((i) => i.teamId === teamId && getRevenueTier(i.revenueUplift) === tierId)
-              .sort((a, b) => b.revenueUplift - a.revenueUplift);
-          };
+          const flagDot = (flag) =>
+            flag === "risk" ? "fill-rose-500 text-rose-500"
+            : flag === "warning" ? "fill-amber-400 text-amber-400"
+            : flag === "completed" ? "fill-emerald-500 text-emerald-500"
+            : flag === "done" ? "fill-gray-400 text-gray-400"
+            : "text-stone-200";
 
-          const RevCard = ({ item, tier }) => {
-            const { cleanText } = extractDate(item.text);
-            const flagClass = flagStyles[item.flag] || "";
-            const badge = getQuarterMonthBadge(item, displayData.columns);
-            if (tier.id === "gray") {
-              const enabledStreams = [...new Set((item.enables || [])
-                .map((id) => displayData.items.find((i) => i.id === id)?.revenueStream).filter(Boolean))];
+          const OutcomeCell = ({ item }) => {
+            const o = formatOutcome(item);
+            if (!o) {
               return (
-                <div onClick={() => setExpandedItem(item.id)}
-                  className="rounded-lg border border-dashed border-stone-300 bg-white px-2.5 py-2 mb-1.5 last:mb-0 cursor-pointer hover:shadow-sm transition-all">
-                  {enabledStreams.length > 0 && (
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-1">
-                      Enables: {enabledStreams.join(", ")}
-                    </div>
-                  )}
-                  <div className="text-xs font-semibold text-stone-700 leading-snug mb-1">
-                    {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded mr-1 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
-                    {cleanText}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
-                    {item.enablerNote && <span className="text-[10px] text-stone-400 italic leading-snug">{item.enablerNote}</span>}
-                  </div>
-                </div>
+                <button
+                  disabled={isPreview}
+                  onClick={isPreview ? undefined : () => { initialModalTabRef.current = "outcome"; setExpandedItem(item.id); }}
+                  className="inline-flex items-center gap-2 text-[11px] px-2.5 py-1 rounded-md border border-dashed border-stone-300 text-stone-400 enabled:hover:border-stone-500 enabled:hover:text-stone-600 transition-colors"
+                >
+                  <Circle className="w-2.5 h-2.5" />{isPreview ? "No outcome set" : "— set an outcome —"}
+                </button>
               );
             }
             return (
-              <div onClick={() => setExpandedItem(item.id)}
-                className={`rounded-md border px-2.5 py-2 mb-1.5 last:mb-0 cursor-pointer hover:shadow-sm transition-all ${item.flag ? flagClass : "bg-white border-stone-200 hover:border-stone-400"}`}>
-                <div className="flex items-start gap-1.5 mb-1">
-                  {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
-                  <span className="flex-1 text-xs font-semibold leading-snug text-stone-800">{cleanText}</span>
-                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
-                </div>
-                <div className="flex items-center gap-2">
-                  {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
-                  {item.revenueStream && <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400 truncate">{item.revenueStream}</span>}
-                  <span className={`ml-auto inline-flex items-center gap-1 flex-shrink-0 ${tier.valueColor}`} title={item.cadence === "recurring" ? "Recurring" : item.cadence === "once" ? "One-time" : undefined}>
-                    <CadenceMark cadence={item.cadence} />
-                    <span className="text-[10px] font-bold">{formatUplift(item.revenueUplift)}</span>
-                  </span>
-                </div>
-              </div>
-            );
-          };
-
-          const SaveCard = ({ item }) => {
-            const { cleanText } = extractDate(item.text);
-            const flagClass = flagStyles[item.flag] || "";
-            const badge = getQuarterMonthBadge(item, displayData.columns);
-            const isUtil = item.savingKind === "utilize";
-            const c = isUtil
-              ? { box: "border-cyan-200 border-l-cyan-500", label: "text-cyan-600", value: "text-cyan-700" }
-              : { box: "border-teal-200 border-l-teal-500", label: "text-teal-600", value: "text-teal-700" };
-            return (
-              <div onClick={() => setExpandedItem(item.id)}
-                className={`rounded-md border border-l-[3px] ${c.box} px-2.5 py-2 cursor-pointer hover:shadow-sm transition-all ${item.flag ? flagClass : "bg-white"}`}>
-                <div className="flex items-start gap-1.5 mb-1">
-                  {item.tag && <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
-                  <span className="flex-1 text-xs font-semibold leading-snug text-stone-800">{cleanText}</span>
-                  <Circle className={`w-2.5 h-2.5 flex-shrink-0 mt-0.5 ${item.flag === "risk" ? "fill-rose-500 text-rose-500" : item.flag === "warning" ? "fill-amber-400 text-amber-400" : item.flag === "completed" ? "fill-emerald-500 text-emerald-500" : item.flag === "done" ? "fill-gray-400 text-gray-400" : "text-stone-200"}`} />
-                </div>
-                <div className="flex items-center gap-2">
-                  {badge && <span className="font-mono font-bold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">{badge}</span>}
-                  <span className={`text-[9px] font-bold uppercase tracking-wider truncate ${c.label}`}>SAVES{item.savingArea ? ` · ${item.savingArea}` : ""}</span>
-                  <span className={`text-[10px] font-bold ml-auto inline-flex items-center gap-1 flex-shrink-0 ${c.value}`} title={item.cadence === "recurring" ? "Recurring" : item.cadence === "once" ? "One-time" : undefined}>
-                    <CadenceMark cadence={item.cadence} />
-                    {formatUplift(item.savingAmount) || "—"}<ArrowDown className="w-2.5 h-2.5" />
-                  </span>
-                </div>
-              </div>
+              <span className={`inline-flex items-center gap-2 text-[12px] px-2.5 py-1 rounded-md border ${o.chip}`}>
+                <span>{o.icon}</span>
+                {o.label && <span className="font-semibold leading-snug">{o.label}</span>}
+                {o.value && <span className="font-mono font-bold whitespace-nowrap">{o.value}</span>}
+                {o.suffix && <span className="text-[10px] uppercase tracking-wider opacity-70 whitespace-nowrap">{o.suffix}</span>}
+              </span>
             );
           };
 
           return (
-            <div className="max-w-[1800px] mx-auto">
+            <div className="max-w-[1400px] mx-auto">
               {/* Quarter navigator */}
               <div className="flex items-center justify-center mb-6">
                 <div className="flex items-center gap-3 bg-white border-2 border-stone-900 rounded-xl px-4 py-2.5" style={{ boxShadow: "3px 3px 0px #1c1917" }}>
                   <button
-                    onClick={() => setRevenueColIdx((i) => Math.max(0, i - 1))}
+                    onClick={() => setImpactColIdx((i) => Math.max(0, i - 1))}
                     disabled={safeIdx === 0}
                     className="w-7 h-7 flex items-center justify-center border-[1.5px] border-stone-900 rounded-md text-stone-900 hover:bg-stone-900 hover:text-white disabled:border-stone-300 disabled:text-stone-300 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1750,7 +1728,7 @@ export default function RoadmapTracker() {
                     {selectedCol.subtitle || selectedCol.title}
                   </span>
                   <button
-                    onClick={() => setRevenueColIdx((i) => Math.min(displayData.columns.length - 1, i + 1))}
+                    onClick={() => setImpactColIdx((i) => Math.min(displayData.columns.length - 1, i + 1))}
                     disabled={safeIdx === displayData.columns.length - 1}
                     className="w-7 h-7 flex items-center justify-center border-[1.5px] border-stone-900 rounded-md text-stone-900 hover:bg-stone-900 hover:text-white disabled:border-stone-300 disabled:text-stone-300 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1759,150 +1737,54 @@ export default function RoadmapTracker() {
                 </div>
               </div>
 
-              {/* Summary — Financial Impact (€) + Pipeline (counts) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
-                {/* Financial Impact */}
-                <div className="bg-white border border-stone-200 rounded-xl px-5 py-4">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-3">Financial Impact</div>
-                  <div className="space-y-2.5">
-                    {[
-                      { dot: "bg-green-600", color: "text-green-600", label: "Revenue Uplift",   value: formatUplift(totalUplift) || "€0" },
-                      { dot: "bg-teal-500",  color: "text-teal-600",  label: "Cost Reduction",   value: formatUplift(totalReduction) || "€0" },
-                      { dot: "bg-cyan-500",  color: "text-cyan-600",  label: "Cost Utilisation", value: formatUplift(totalUtilisation) || "€0" },
-                    ].map(({ dot, color, label, value }) => (
-                      <div key={label} className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot}`} />
-                        <span className="text-sm text-stone-600">{label}</span>
-                        <span className={`ml-auto text-xl font-black tracking-tight ${color}`}>{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {/* Pipeline */}
-                <div className="bg-white border border-stone-200 rounded-xl px-5 py-4">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-stone-400 mb-3">Pipeline</div>
-                  <div className="space-y-2.5">
-                    {[
-                      { label: "Contributors",   value: directItems.length,  accent: false },
-                      { label: "Enablers",       value: enablerItems.length, accent: false },
-                      { label: "Needs Estimate", value: needsEstimate.length, accent: needsEstimate.length > 0 },
-                    ].map(({ label, value, accent }) => (
-                      <div key={label} className="flex items-center gap-2">
-                        <span className="text-sm text-stone-600">{label}</span>
-                        <span className={`ml-auto text-xl font-black tracking-tight ${accent ? "text-amber-500" : "text-stone-900"}`}>{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* Outcome coverage summary */}
+              <div className="flex items-center justify-center mb-6 text-xs text-stone-500 font-mono">
+                <span className="font-bold text-stone-900">{withOutcome}</span>&nbsp;of&nbsp;
+                <span className="font-bold text-stone-900">{timelineItems.length}</span>&nbsp;initiatives have an outcome metric
               </div>
 
-              {/* Mobile: stacked tiers */}
-              <div className="md:hidden space-y-4">
-                {REVENUE_TIERS.map((tier) => {
-                  const tierItems = tier.id === "gray"
-                    ? enablerItems
-                    : estimated.filter((i) => getRevenueTier(i.revenueUplift) === tier.id)
-                        .sort((a, b) => b.revenueUplift - a.revenueUplift);
+              {/* Swimlane board */}
+              <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+                {/* Column header */}
+                <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                  <div className="px-4 py-3 text-[10px] font-mono font-bold uppercase tracking-wider text-stone-500 bg-stone-50 border-b border-stone-200">Initiative</div>
+                  <div className="px-4 py-3 text-[10px] font-mono font-bold uppercase tracking-wider text-stone-500 bg-stone-50 border-b border-l border-stone-200">Outcome Metric</div>
+                </div>
+
+                {displayData.teams.map((team) => {
+                  const teamItems = timelineItems.filter((i) => i.teamId === team.id);
+                  if (teamItems.length === 0) return null;
                   return (
-                    <div key={tier.id} className={`rounded-xl overflow-hidden border ${tier.id === "gray" ? "border-dashed border-stone-300" : "border-stone-200"}`}>
-                      <div className={`${tier.headerBg} ${tier.headerText} flex items-center gap-3 px-4 py-3`}>
-                        <span className="font-bold text-sm uppercase tracking-wide">{tier.label}</span>
-                        <span className="text-xs opacity-75">— {tier.sub}</span>
-                      </div>
-                      <div className={`${tier.bodyBg} p-3 space-y-3`}>
-                        {tierItems.length === 0 ? (
-                          <div className="text-[10px] text-stone-300 italic text-center py-3">No items</div>
-                        ) : (
-                          displayData.teams.map((team) => {
-                            const teamItems = itemsForCell(team.id, tier.id);
-                            if (teamItems.length === 0) return null;
-                            return (
-                              <div key={team.id}>
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">{team.name}</div>
-                                {teamItems.map((item) => <RevCard key={item.id} item={item} tier={tier} />)}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
+                    <div key={team.id}>
+                      <div className="px-4 py-2 bg-stone-200 text-stone-800 text-[11px] font-mono font-bold uppercase tracking-widest">{team.name}</div>
+                      {teamItems.map((item) => {
+                        const { cleanText } = extractDate(item.text);
+                        return (
+                          <div key={item.id} className="grid border-b border-stone-100" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                            <div onClick={() => setExpandedItem(item.id)} className="px-4 py-3 flex items-center gap-2 cursor-pointer hover:bg-stone-50 transition-colors">
+                              {item.tag && <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>{item.tag}</span>}
+                              <span className="text-sm text-stone-800 leading-snug">{cleanText}</span>
+                              <Circle className={`ml-auto w-2.5 h-2.5 flex-shrink-0 ${flagDot(item.flag)}`} />
+                            </div>
+                            <div className="px-4 py-3 border-l border-stone-100 flex items-center">
+                              <OutcomeCell item={item} />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
+
+                {timelineItems.length === 0 && (
+                  <div className="px-4 py-10 text-center text-xs text-stone-400 italic">
+                    No initiatives in {selectedCol.subtitle || selectedCol.title}
+                  </div>
+                )}
               </div>
-
-              {/* Desktop: grid */}
-              <div className="hidden md:block">
-                {/* Header row */}
-                <div style={{ display: "grid", gridTemplateColumns: "140px repeat(5, 1fr)" }}>
-                  <div />
-                  {REVENUE_TIERS.map((tier, i) => (
-                    <div key={tier.id} className={`${tier.headerBg} ${tier.headerText} px-3 py-3 text-center ${i === 0 ? "rounded-tl-lg" : ""} ${i === 4 ? "rounded-tr-lg border border-dashed border-stone-400 border-b-0" : ""}`}>
-                      <div className="font-bold text-xs tracking-wide uppercase">{tier.label}</div>
-                      <div className="text-[9px] opacity-75 mt-0.5">{tier.sub}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Team swim lane rows */}
-                {displayData.teams.map((team) => (
-                  <div key={team.id} style={{ display: "grid", gridTemplateColumns: "140px repeat(5, 1fr)", marginTop: "10px" }}>
-                    <div className="bg-stone-200 border border-stone-300 rounded-l-lg flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center">
-                      {team.name}
-                    </div>
-                    {REVENUE_TIERS.map((tier, catIdx) => {
-                      const cellItems = itemsForCell(team.id, tier.id);
-                      const isLast = catIdx === 4;
-                      return (
-                        <div key={tier.id} className={`${tier.bodyBg} border border-stone-200 border-l-0 p-2 min-h-[90px] ${isLast ? "rounded-r-lg border-dashed border-stone-300" : ""}`}>
-                          {cellItems.length === 0
-                            ? <div className="text-[10px] text-stone-300 italic text-center pt-6">—</div>
-                            : cellItems.map((item) => <RevCard key={item.id} item={item} tier={tier} />)
-                          }
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-
-              {/* Cost Savings band — separate from the revenue tiers, split by kind */}
-              {savingItems.length > 0 && (
-                <div className="mt-8">
-                  <div className="bg-teal-600 text-white rounded-t-lg px-4 py-3 flex items-center gap-3">
-                    <PiggyBank className="w-4 h-4 flex-shrink-0" />
-                    <span className="font-bold text-sm uppercase tracking-wide">Cost Savings</span>
-                    <span className="text-xs opacity-75 hidden sm:inline">— value from reducing or fully utilising spend</span>
-                    <span className="ml-auto font-mono font-bold text-xs sm:text-sm whitespace-nowrap">
-                      Reduction {formatUplift(totalReduction) || "€0"} · Utilisation {formatUplift(totalUtilisation) || "€0"}
-                    </span>
-                  </div>
-                  <div className="bg-teal-50 border border-teal-100 rounded-b-lg p-4 space-y-5">
-                    {[
-                      { id: "reduce",  items: reductionItems,   total: totalReduction,   dot: "bg-teal-500", label: "Cost Reduction",   labelColor: "text-teal-700", note: "removes an expense" },
-                      { id: "utilize", items: utilisationItems, total: totalUtilisation, dot: "bg-cyan-500", label: "Cost Utilisation", labelColor: "text-cyan-700", note: "makes existing spend pay off" },
-                    ].map((grp) => {
-                      if (grp.items.length === 0) return null;
-                      const sorted = [...grp.items].sort((a, b) => (b.savingAmount || 0) - (a.savingAmount || 0));
-                      return (
-                        <div key={grp.id}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${grp.dot}`} />
-                            <span className={`text-[11px] font-bold uppercase tracking-wider ${grp.labelColor}`}>{grp.label}</span>
-                            <span className="text-[10px] text-stone-400 opacity-80 hidden sm:inline">— {grp.note}</span>
-                            <span className={`ml-auto text-[11px] font-mono font-bold ${grp.labelColor}`}>{formatUplift(grp.total) || "€0"}</span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {sorted.map((item) => <SaveCard key={item.id} item={item} />)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
-                {!isPreview && <span><span className="font-bold">Click</span> any item to open it and set revenue type, uplift and stream</span>}
+                {!isPreview && <span><span className="font-bold">Click</span> any initiative to set its outcome metric</span>}
                 <span className="ml-auto opacity-40">{APP_VERSION}</span>
               </div>
             </div>
@@ -2129,7 +2011,7 @@ export default function RoadmapTracker() {
 
               {/* Modal inner tabs */}
               <div className="flex border-b border-stone-100">
-                {[{ id: "details", label: "Details" }, { id: "revenue", label: "Revenue" }].map(({ id, label }) => (
+                {[{ id: "details", label: "Details" }, { id: "outcome", label: "Outcome Metric" }].map(({ id, label }) => (
                   <button key={id} onClick={() => setModalTab(id)}
                     className={`text-[10px] font-mono font-semibold uppercase tracking-wider px-5 py-2.5 border-b-2 transition-colors ${modalTab === id ? "border-stone-700 text-stone-900" : "border-transparent text-stone-400 hover:text-stone-700"}`}>
                     {label}
@@ -2247,31 +2129,47 @@ export default function RoadmapTracker() {
               )}{/* end details tab */}
 
               {/* Modal body — Revenue tab */}
-              {modalTab === "revenue" && (() => {
+              {modalTab === "outcome" && (() => {
                 const doneColId = displayData.columns[0]?.id;
                 const directNotDone = displayData.items.filter((i) =>
                   i.revenueType === "direct" && i.columnId !== doneColId && i.id !== modalItem.id
                 );
                 const usedStreams = [...new Set(displayData.items.map((i) => i.revenueStream).filter(Boolean))];
+                const usedMetrics = [...new Set(displayData.items.map((i) => i.metricName).filter(Boolean))];
+                const preview = formatOutcome(modalItem);
                 return (
                   <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
-                    {/* Value type */}
+                    {/* Outcome type */}
                     <div>
-                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Value Type</label>
+                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Outcome Type</label>
                       <div className="flex gap-2 flex-wrap">
-                        {[{ val: null, label: "None" }, { val: "direct", label: "Direct Contributor" }, { val: "saving", label: "Cost Saving" }, { val: "enabler", label: "Enabler" }].map(({ val, label }) => (
+                        {OUTCOME_TYPES.map(({ val, label, active }) => (
                           <button key={String(val)} disabled={isPreview} onClick={isPreview ? undefined : () => updateItem(modalItem.id, { revenueType: val })}
                             className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
                               modalItem.revenueType === val
-                                ? val === "direct"  ? "border-green-600 bg-green-50 text-green-800 font-bold"
-                                : val === "saving"  ? "border-teal-500 bg-teal-50 text-teal-800 font-bold"
-                                : val === "enabler" ? "border-violet-500 bg-violet-50 text-violet-800 font-bold"
-                                :                    "border-stone-400 bg-stone-100 text-stone-900 font-bold"
+                                ? `${active} font-bold`
                                 : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
                             }`}>{label}</button>
                         ))}
                       </div>
                     </div>
+
+                    {/* Live preview — exactly what shows in the "by IMPACT" column */}
+                    {modalItem.revenueType && (
+                      <div className="rounded-md bg-stone-50 border border-stone-200 px-3 py-2 flex items-center gap-2 flex-wrap">
+                        <span className="text-[9px] font-mono uppercase tracking-wider text-stone-400">Preview</span>
+                        {preview ? (
+                          <span className={`inline-flex items-center gap-2 text-[12px] px-2.5 py-1 rounded-md border ${preview.chip}`}>
+                            <span>{preview.icon}</span>
+                            {preview.label && <span className="font-semibold">{preview.label}</span>}
+                            {preview.value && <span className="font-mono font-bold">{preview.value}</span>}
+                            {preview.suffix && <span className="text-[10px] uppercase tracking-wider opacity-70">{preview.suffix}</span>}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-stone-400 italic">Fill in the fields below — the chip updates when you click out of a field</span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Cost impact + value — saving only */}
                     {modalItem.revenueType === "saving" && (
@@ -2318,28 +2216,46 @@ export default function RoadmapTracker() {
                       </>
                     )}
 
-                    {/* Uplift — direct only */}
+                    {/* Uplift (+ optional range) — direct only */}
                     {modalItem.revenueType === "direct" && (
                       <div>
-                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Uplift (€)</label>
-                        <input type="number" key={modalItem.id + "-uplift"}
-                          defaultValue={modalItem.revenueUplift ?? ""}
-                          readOnly={isPreview}
-                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { revenueUplift: e.target.value ? Number(e.target.value) : null })}
-                          placeholder="e.g. 1800000"
-                          className="w-full text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
-                        {modalItem.revenueUplift && (
-                          <div className="text-[9px] text-stone-400 mt-1">Displays as {formatUplift(modalItem.revenueUplift)} — determines which tier column this item appears in</div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Revenue Uplift (€) <span className="normal-case opacity-60">— leave "to" blank for a single value, or fill it for a range</span></label>
+                        <div className="flex items-center gap-2">
+                          <input type="number" key={modalItem.id + "-uplift"}
+                            defaultValue={modalItem.revenueUplift ?? ""}
+                            readOnly={isPreview}
+                            onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { revenueUplift: e.target.value ? Number(e.target.value) : null })}
+                            placeholder="e.g. 10000"
+                            className="flex-1 min-w-0 text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                          <span className="text-stone-400 text-xs">to</span>
+                          <input type="number" key={modalItem.id + "-upliftmax"}
+                            defaultValue={modalItem.outcomeMax ?? ""}
+                            readOnly={isPreview}
+                            onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { outcomeMax: e.target.value ? Number(e.target.value) : null })}
+                            placeholder="e.g. 25000"
+                            className="flex-1 min-w-0 text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                        </div>
+                        {modalItem.revenueUplift != null && (
+                          <div className="text-[9px] text-stone-400 mt-1">Shows as {formatRange(modalItem.revenueUplift, modalItem.outcomeMax)} — the lower value sets the Revenue Impact tier column</div>
                         )}
                       </div>
                     )}
 
-                    {/* Frequency — direct only */}
+                    {/* Cadence — direct only */}
                     {modalItem.revenueType === "direct" && (
                       <div>
-                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Frequency</label>
-                        <CadenceToggle value={modalItem.cadence} disabled={isPreview}
-                          onSelect={(v) => updateItem(modalItem.id, { cadence: v })} />
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Cadence</label>
+                        <div className="flex gap-2 flex-wrap">
+                          {[{ v: "once", l: "One-time" }, { v: "incremental", l: "Incremental" }, { v: "month", l: "Per month" }, { v: "year", l: "Per year" }].map(({ v, l }) => (
+                            <button key={v} disabled={isPreview}
+                              onClick={isPreview ? undefined : () => updateItem(modalItem.id, { cadence: modalItem.cadence === v ? null : v })}
+                              className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
+                                modalItem.cadence === v
+                                  ? "border-green-600 bg-green-50 text-green-800 font-bold"
+                                  : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
+                              }`}>{l}</button>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -2400,6 +2316,68 @@ export default function RoadmapTracker() {
                             })}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Metric (KPI) — metric only */}
+                    {modalItem.revenueType === "metric" && (
+                      <>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-2">Direction</label>
+                          <div className="flex gap-2">
+                            {[{ v: "up", l: "↑ Increase" }, { v: "down", l: "↓ Decrease" }].map(({ v, l }) => (
+                              <button key={v} disabled={isPreview}
+                                onClick={isPreview ? undefined : () => updateItem(modalItem.id, { metricDir: v })}
+                                className={`text-[10px] font-mono px-3 py-1.5 rounded border transition-colors ${
+                                  (modalItem.metricDir || "up") === v
+                                    ? "border-sky-500 bg-sky-50 text-sky-800 font-bold"
+                                    : "border-stone-200 text-stone-500 hover:border-stone-400 hover:text-stone-700"
+                                }`}>{l}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Metric <span className="normal-case opacity-60">— what moves</span></label>
+                          <input type="text" list="metric-datalist" key={modalItem.id + "-metricname"}
+                            defaultValue={modalItem.metricName ?? ""}
+                            readOnly={isPreview}
+                            onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { metricName: e.target.value.trim() || null })}
+                            placeholder="e.g. # of leads, CT Opt-In rate, Churn"
+                            className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
+                          <datalist id="metric-datalist">
+                            {usedMetrics.map((m) => <option key={m} value={m} />)}
+                          </datalist>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Change</label>
+                          <div className="flex items-center gap-2">
+                            <input type="number" step="any" key={modalItem.id + "-metricval"}
+                              defaultValue={modalItem.metricValue ?? ""}
+                              readOnly={isPreview}
+                              onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { metricValue: e.target.value ? Number(e.target.value) : null })}
+                              placeholder="e.g. 1.5"
+                              className="flex-1 min-w-0 text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500" />
+                            <select key={modalItem.id + "-metricunit"} disabled={isPreview}
+                              value={modalItem.metricUnit || "%"}
+                              onChange={isPreview ? undefined : (e) => updateItem(modalItem.id, { metricUnit: e.target.value })}
+                              className="text-xs border border-stone-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-stone-500">
+                              {METRIC_UNITS.map((u) => <option key={u} value={u}>{u === "x" ? "×" : u}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Strategic (OKR / KR) — strategic only */}
+                    {modalItem.revenueType === "strategic" && (
+                      <div>
+                        <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Supports / contributes to</label>
+                        <input type="text" key={modalItem.id + "-strategic"}
+                          defaultValue={modalItem.strategicNote ?? ""}
+                          readOnly={isPreview}
+                          onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { strategicNote: e.target.value.trim() || null })}
+                          placeholder="e.g. KR7 + Reducing churn, Enabler for KR6"
+                          className={`w-full text-xs border border-stone-300 rounded px-2 py-1.5 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
                       </div>
                     )}
                   </div>
