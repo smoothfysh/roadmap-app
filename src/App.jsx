@@ -1180,12 +1180,12 @@ export default function RoadmapTracker() {
                   if (e.key === "Enter") e.target.blur();
                   if (e.key === "Escape") setEditingHeading(false);
                 }}
-                className="text-4xl font-black italic tracking-tight text-stone-900 text-center bg-white border border-stone-400 rounded px-3 py-1 w-[min(90vw,820px)]"
+                className="text-2xl sm:text-4xl font-black italic tracking-tight text-stone-900 text-center bg-white border border-stone-400 rounded px-3 py-1 w-[min(90vw,820px)]"
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               />
             ) : (
               <h1
-                className={`text-4xl font-black italic tracking-tight text-stone-900 text-center ${!isPreview ? "cursor-text hover:text-stone-600" : ""}`}
+                className={`text-2xl sm:text-4xl font-black italic tracking-tight text-stone-900 text-center ${!isPreview ? "cursor-text hover:text-stone-600" : ""}`}
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                 onClick={() => { if (!isPreview) setEditingHeading(true); }}
                 title={!isPreview ? "Click to edit title" : undefined}
@@ -1198,7 +1198,7 @@ export default function RoadmapTracker() {
               <span className="w-3.5 h-3.5 rounded-full bg-amber-400" title="At risk"></span>
               <span className="w-3.5 h-3.5 rounded-full bg-rose-500" title="Blocked"></span>
             </div>
-            <div className="absolute right-0 text-xs text-stone-500 font-mono">
+            <div className="hidden sm:block absolute right-0 text-xs text-stone-500 font-mono">
               {isPreview ? "Read-only preview — save a copy to make edits" : "Drag items to reorder"}
             </div>
           </div>
