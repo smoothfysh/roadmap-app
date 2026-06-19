@@ -6,6 +6,9 @@ import { version } from "../package.json";
 // Bump the "version" field there on significant changes.
 const APP_VERSION = `v${version}`;
 
+// Centered app title shown at the top of every tab.
+const APP_TITLE = "The best-laid plans of mice and men often go awry";
+
 // ---------- Per-scope storage key (supports ?scope=name in URL) ----------
 const STORAGE_KEY = (() => {
   try {
@@ -25,7 +28,7 @@ const LOCATION_URL = (() => {
 // ---------- Seed data ----------
 const seedData = {
   title: "My Roadmap",
-  heading: "2026",
+  heading: APP_TITLE,
   columns: [
     { id: "done", title: "DONE", subtitle: "Released stuff... already LIVE!", color: "green" },
     { id: "coming", title: "COMING SOON", subtitle: "Q2 2026", color: "blue" },
@@ -577,6 +580,8 @@ export default function RoadmapTracker() {
             c.id === "future" && c.color === "rose" ? { ...c, color: "slate" } : c
           );
           if (!parsed.title) parsed.title = seedData.title;
+          // Migrate: the old default heading "2026" → the app title.
+          if (!parsed.heading || parsed.heading === "2026") parsed.heading = seedData.heading;
           // Migrate: add any teams that items reference but are missing from the teams list.
           // This repairs a mismatch that occurs when items were loaded from a CSV whose
           // teamIds (e.g. "firefly") no longer exist in the stored teams array.
@@ -1115,37 +1120,38 @@ export default function RoadmapTracker() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="relative flex items-center justify-center gap-3">
             {editingHeading && !isPreview ? (
               <input
                 type="text"
                 defaultValue={displayData.heading || seedData.heading}
                 autoFocus
+                maxLength={60}
                 onBlur={(e) => { updateHeading(e.target.value); setEditingHeading(false); }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.target.blur();
                   if (e.key === "Escape") setEditingHeading(false);
                 }}
-                className="text-4xl font-black tracking-tight text-stone-900 border border-stone-500 px-1 bg-white w-36"
+                className="text-4xl font-black italic tracking-tight text-stone-900 text-center bg-white border border-stone-400 rounded px-3 py-1 w-[min(90vw,820px)]"
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               />
             ) : (
               <h1
-                className={`text-4xl font-black tracking-tight text-stone-900 ${!isPreview ? "cursor-text hover:text-stone-600" : ""}`}
+                className={`text-4xl font-black italic tracking-tight text-stone-900 text-center ${!isPreview ? "cursor-text hover:text-stone-600" : ""}`}
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                 onClick={() => { if (!isPreview) setEditingHeading(true); }}
-                title={!isPreview ? "Click to edit" : undefined}
+                title={!isPreview ? "Click to edit title" : undefined}
               >
                 {displayData.heading || seedData.heading}
               </h1>
             )}
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-shrink-0">
               <span className="w-3.5 h-3.5 rounded-full bg-emerald-500" title="On track"></span>
               <span className="w-3.5 h-3.5 rounded-full bg-amber-400" title="At risk"></span>
               <span className="w-3.5 h-3.5 rounded-full bg-rose-500" title="Blocked"></span>
             </div>
-            <div className="ml-auto text-xs text-stone-500 font-mono">
-              {isPreview ? "Read-only preview — save a copy to make edits" : "Drag items to reorder · Click status dot to cycle flag"}
+            <div className="absolute right-0 text-xs text-stone-500 font-mono">
+              {isPreview ? "Read-only preview — save a copy to make edits" : "Drag items to reorder"}
             </div>
           </div>
         </div>
