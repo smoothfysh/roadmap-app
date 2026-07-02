@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat, Rows3 } from "lucide-react";
 import { version } from "../package.json";
 
 // Single app-wide version shown in every tab footer — sourced from package.json.
@@ -488,6 +488,14 @@ export default function RoadmapTracker() {
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
   const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
   const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue" | "impact" | "gantt"
+  // "BY TIME" layout toggle. Compact ON (default) = each column flows independently (original layout).
+  // Compact OFF = team rows align to the same level across all columns. Persisted across visits.
+  const [compactView, setCompactView] = useState(() => {
+    try {
+      const v = localStorage.getItem("roadmap-compact-view");
+      return v === null ? true : v === "true";
+    } catch { return true; }
+  });
   const [ganttColW, setGanttColW] = useState(96); // month column width, sized so ~9 months fill the viewport
   const [modalTab, setModalTab] = useState("details"); // "details" | "outcome"
   const initialModalTabRef = useRef("details"); // tab to land on when the modal next opens (reset after use)
@@ -950,6 +958,288 @@ export default function RoadmapTracker() {
   const displayData = sharedPreview ?? data;
   const isPreview = !!sharedPreview;
 
+  // ---- "BY TIME" render helpers (shared by compact + aligned layouts) ----
+  const renderColumnHeader = (col, styles) => (
+    <div className={`${styles.header} ${styles.headerText} rounded-t-lg px-4 py-5 text-center shadow-sm`}>
+      <h2 className="text-xl font-bold tracking-wider">{col.title}</h2>
+      {editingSubtitle === col.id && !isPreview ? (
+        <input
+          type="text"
+          defaultValue={col.subtitle}
+          autoFocus
+          onBlur={(e) => { updateColumnSubtitle(col.id, e.target.value); setEditingSubtitle(null); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.target.blur();
+            if (e.key === "Escape") setEditingSubtitle(null);
+          }}
+          className="text-xs mt-1 font-mono text-center bg-white/60 border border-stone-900/30 rounded px-1.5 py-0.5 w-full max-w-[180px] mx-auto block"
+        />
+      ) : (
+        <p
+          className={`text-xs mt-1 opacity-80 font-mono ${!isPreview ? "cursor-text hover:opacity-100 hover:underline decoration-dotted underline-offset-2" : ""}`}
+          onClick={() => { if (!isPreview) setEditingSubtitle(col.id); }}
+          title={!isPreview ? "Click to edit" : undefined}
+        >
+          {col.subtitle || <span className="italic opacity-50">click to set quarter</span>}
+        </p>
+      )}
+    </div>
+  );
+
+  const renderTeamBlock = (col, styles, team) => {
+    const teamItems = displayData.items.filter(
+      (i) => i.columnId === col.id && i.teamId === team.id
+    );
+    const sectionKey = `${col.id}-${team.id}`;
+    const isDragOverSection = dragOverSection === sectionKey;
+    const isAdding = !isPreview && addingTo?.columnId === col.id && addingTo?.teamId === team.id;
+    const isFirstColumn = col.id === displayData.columns[0].id;
+
+    return (
+      <div
+        key={team.id}
+        className={`rounded-md transition-colors ${isDragOverSection ? "ring-2 ring-stone-800" : ""}`}
+        onDragOver={!isPreview ? (e) => handleDragOverSection(e, col.id, team.id) : undefined}
+        onDrop={!isPreview ? (e) => handleDropOnSection(e, col.id, team.id) : undefined}
+      >
+        {/* Team Header */}
+        <div className={`${styles.section} rounded-md mb-2 relative group min-h-[32px]`}>
+          {editingTeam === team.id && !isPreview ? (
+            <div className="px-8 py-2">
+              <input
+                type="text"
+                defaultValue={team.name}
+                autoFocus={isFirstColumn}
+                onFocus={(e) => e.target.select()}
+                onBlur={(e) => {
+                  if (isFirstColumn) { updateTeamName(team.id, e.target.value); setEditingTeam(null); }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.target.blur();
+                  if (e.key === "Escape") setEditingTeam(null);
+                }}
+                readOnly={!isFirstColumn}
+                className="text-xs font-bold text-stone-900 text-center bg-white border border-stone-500 rounded px-2 py-0.5 w-full"
+              />
+            </div>
+          ) : (
+            <h3
+              className={`text-xs font-bold tracking-wide text-stone-900 text-center px-8 py-2 m-0 flex items-center justify-center min-h-[32px] ${!isPreview ? "cursor-text hover:underline decoration-dotted underline-offset-2" : ""}`}
+              onMouseDown={!isPreview ? (e) => { e.preventDefault(); setEditingTeam(team.id); } : undefined}
+              title={!isPreview ? "Click to edit team name" : undefined}
+            >
+              <span>{team.name}</span>
+            </h3>
+          )}
+          {/* Delete team button — only in first column, not in preview */}
+          {!isPreview && isFirstColumn && editingTeam !== team.id && (
+            <button
+              onClick={(e) => { e.stopPropagation(); deleteTeam(team.id); }}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Delete team (must be empty)"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+          {/* Add item button */}
+          {!isPreview && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setAddingTo({ columnId: col.id, teamId: team.id }); }}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-900 hover:bg-white/50 rounded w-5 h-5 flex items-center justify-center transition-colors"
+              title="Add item"
+            >
+              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+            </button>
+          )}
+        </div>
+
+        {/* Team Items */}
+        <div className="space-y-1.5">
+          {teamItems.map((item) => {
+            const isDragOver = dragOverId === item.id;
+            const flagClass = flagStyles[item.flag] || "";
+            const { pill, cleanText } = getItemDisplay(item);
+            const isExpanded = expandedItem === item.id;
+            return (
+              <div
+                key={item.id}
+                draggable={!isPreview}
+                onDragStart={!isPreview ? () => handleDragStart(item) : undefined}
+                onDragOver={!isPreview ? (e) => handleDragOverItem(e, item) : undefined}
+                onDrop={!isPreview ? (e) => handleDrop(e, item) : undefined}
+                onDragEnd={!isPreview ? handleDragEnd : undefined}
+                onClick={() => setExpandedItem(item.id)}
+                className={`
+                  group relative rounded-md border px-2 py-1.5 text-xs transition-all cursor-pointer
+                  ${item.flag ? flagClass : styles.item}
+                  ${isDragOver ? "ring-2 ring-stone-800 translate-y-0.5" : ""}
+                  ${dragItem?.id === item.id ? "opacity-40" : ""}
+                `}
+              >
+                {/* Collapsed header row */}
+                <div className="flex items-center gap-1.5">
+                  {!isPreview && !isExpanded && (
+                    <GripVertical className="w-3 h-3 text-stone-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
+                  {item.tag && (
+                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>
+                      {item.tag}
+                    </span>
+                  )}
+                  <span className="flex-1 leading-snug flex flex-wrap items-center gap-1 min-w-0">
+                    <span className="truncate">{cleanText}</span>
+                    {pill && (
+                      <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">
+                        {pill}
+                      </span>
+                    )}
+                  </span>
+                  {/* Notes indicator */}
+                  {item.description && !isExpanded && (
+                    <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-stone-400" title="Has notes" />
+                  )}
+                  {/* JIRA badge */}
+                  {item.jiraUrl && (
+                    <a
+                      href={item.jiraUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-white font-bold text-[8px] hover:opacity-75 transition-opacity"
+                      style={{ backgroundColor: "#0052CC" }}
+                      title={`JIRA: ${item.jiraUrl}`}
+                    >J</a>
+                  )}
+                  {/* Confluence badge */}
+                  {item.confluenceUrl && (
+                    <a
+                      href={item.confluenceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-white font-bold text-[8px] hover:opacity-75 transition-opacity"
+                      style={{ backgroundColor: "#0065FF" }}
+                      title={`Confluence: ${item.confluenceUrl}`}
+                    >C</a>
+                  )}
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={!isPreview ? (e) => { e.stopPropagation(); setFlagPickerOpen(flagPickerOpen === item.id ? null : item.id); } : (e) => e.stopPropagation()}
+                      className={`flex-shrink-0 transition-opacity ${!isPreview ? "opacity-60 hover:opacity-100" : "opacity-40 cursor-default"}`}
+                      title={!isPreview ? "Set status" : undefined}
+                    >
+                      <Circle className={`w-3 h-3 ${
+                        item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
+                        item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
+                        item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
+                        item.flag === "done"      ? "fill-gray-400 text-gray-400" :
+                        "text-stone-300"
+                      }`} />
+                    </button>
+                    {flagPickerOpen === item.id && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setFlagPickerOpen(null); }} />
+                        <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-stone-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
+                          {STATUS_OPTIONS.map((opt) => (
+                            <button
+                              key={String(opt.flag)}
+                              onClick={(e) => { e.stopPropagation(); setFlag(item.id, opt.flag); setFlagPickerOpen(null); }}
+                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono hover:bg-stone-50 transition-colors ${item.flag === opt.flag ? "bg-stone-50 font-bold" : ""}`}
+                            >
+                              <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {!isPreview && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: item.id, text: item.text }); }}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-600"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+              </div>
+            );
+          })}
+
+          {/* Add Item Form */}
+          {isAdding && (() => {
+            const liveTag = extractTag(newItemText.trim()).tag;
+            const liveStyle = liveTag ? getTagStyle(liveTag) : null;
+            return (
+              <div className="rounded-md border-2 border-dashed border-stone-400 p-2 bg-white space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  {liveTag && (
+                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${liveStyle}`}>
+                      {liveTag}
+                    </span>
+                  )}
+                  <input
+                    type="text"
+                    value={newItemText}
+                    onChange={(e) => setNewItemText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addItem(col.id, team.id);
+                      if (e.key === "Escape") { setAddingTo(null); setNewItemText(""); }
+                    }}
+                    autoFocus
+                    placeholder="FR: feature name, or just a title…"
+                    className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5"
+                  />
+                </div>
+                <div className="flex gap-1.5 justify-end">
+                  <button
+                    onClick={() => { setAddingTo(null); setNewItemText(""); }}
+                    className="text-[10px] px-2 py-0.5 text-stone-600 hover:text-stone-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => addItem(col.id, team.id)}
+                    className="text-[10px] px-2 py-0.5 bg-stone-800 text-white rounded hover:bg-stone-700"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    );
+  };
+
+  // Aligned layout (lg+ only): one grid row per team so team headers line up across all columns.
+  const renderAlignedBoard = () => (
+    <div className="max-w-[1800px] mx-auto grid grid-cols-4 gap-x-4">
+      {displayData.columns.map((col) => {
+        const styles = columnStyles[col.color] ?? columnStyles.slate;
+        return <div key={`hdr-${col.id}`}>{renderColumnHeader(col, styles)}</div>;
+      })}
+      {displayData.teams.map((team, ti) => {
+        const isLastTeam = ti === displayData.teams.length - 1;
+        return displayData.columns.map((col) => {
+          const styles = columnStyles[col.color] ?? columnStyles.slate;
+          return (
+            <div
+              key={`${col.id}-${team.id}`}
+              className={`${styles.body} px-3 pt-3 ${isLastTeam ? "pb-3 rounded-b-lg" : "pb-2"}`}
+            >
+              {renderTeamBlock(col, styles, team)}
+            </div>
+          );
+        });
+      })}
+    </div>
+  );
+
   // Gantt: size month columns so ~9 months (prev/current/next quarter) fill the viewport width.
   useEffect(() => {
     if (activeView !== "gantt") return;
@@ -1129,6 +1419,27 @@ export default function RoadmapTracker() {
                 <Download className="w-3 h-3" />
                 Export CSV
               </button>
+              {activeView === "roadmap" && (
+                <button
+                  onClick={() => setCompactView((v) => {
+                    const next = !v;
+                    try { localStorage.setItem("roadmap-compact-view", String(next)); } catch {}
+                    return next;
+                  })}
+                  aria-pressed={compactView}
+                  className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors ${
+                    compactView
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                      : "border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100"
+                  }`}
+                  title={compactView
+                    ? "Compact view ON — each column flows independently. Click to align team rows across all columns."
+                    : "Compact view OFF — team rows align across all columns. Click for the compact, independent layout."}
+                >
+                  <Rows3 className="w-3 h-3" />
+                  Compact View
+                </button>
+              )}
               {!isPreview && (
                 <>
                   <button
@@ -1221,269 +1532,21 @@ export default function RoadmapTracker() {
 
         {/* Roadmap view */}
         {activeView === "roadmap" && <>
-        {/* Columns */}
-        <div className="max-w-[1800px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Columns — aligned rows (lg+) when Compact View is off */}
+        {!compactView && (
+          <div className="hidden lg:block">{renderAlignedBoard()}</div>
+        )}
+        {/* Columns — compact / independent flow (default; also small screens when aligned) */}
+        <div className={`max-w-[1800px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4${!compactView ? " lg:hidden" : ""}`}>
           {displayData.columns.map((col) => {
             const styles = columnStyles[col.color] ?? columnStyles.slate;
             return (
               <div key={col.id} className="flex flex-col">
-                {/* Column Header */}
-                <div className={`${styles.header} ${styles.headerText} rounded-t-lg px-4 py-5 text-center shadow-sm`}>
-                  <h2 className="text-xl font-bold tracking-wider">{col.title}</h2>
-                  {editingSubtitle === col.id && !isPreview ? (
-                    <input
-                      type="text"
-                      defaultValue={col.subtitle}
-                      autoFocus
-                      onBlur={(e) => { updateColumnSubtitle(col.id, e.target.value); setEditingSubtitle(null); }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.target.blur();
-                        if (e.key === "Escape") setEditingSubtitle(null);
-                      }}
-                      className="text-xs mt-1 font-mono text-center bg-white/60 border border-stone-900/30 rounded px-1.5 py-0.5 w-full max-w-[180px] mx-auto block"
-                    />
-                  ) : (
-                    <p
-                      className={`text-xs mt-1 opacity-80 font-mono ${!isPreview ? "cursor-text hover:opacity-100 hover:underline decoration-dotted underline-offset-2" : ""}`}
-                      onClick={() => { if (!isPreview) setEditingSubtitle(col.id); }}
-                      title={!isPreview ? "Click to edit" : undefined}
-                    >
-                      {col.subtitle || <span className="italic opacity-50">click to set quarter</span>}
-                    </p>
-                  )}
-                </div>
+                {renderColumnHeader(col, styles)}
 
                 {/* Column Body */}
                 <div className={`${styles.body} flex-1 rounded-b-lg p-3 space-y-5 min-h-[400px]`}>
-                  {displayData.teams.map((team) => {
-                    const teamItems = displayData.items.filter(
-                      (i) => i.columnId === col.id && i.teamId === team.id
-                    );
-                    const sectionKey = `${col.id}-${team.id}`;
-                    const isDragOverSection = dragOverSection === sectionKey;
-                    const isAdding = !isPreview && addingTo?.columnId === col.id && addingTo?.teamId === team.id;
-                    const isFirstColumn = col.id === displayData.columns[0].id;
-
-                    return (
-                      <div
-                        key={team.id}
-                        className={`rounded-md transition-colors ${isDragOverSection ? "ring-2 ring-stone-800" : ""}`}
-                        onDragOver={!isPreview ? (e) => handleDragOverSection(e, col.id, team.id) : undefined}
-                        onDrop={!isPreview ? (e) => handleDropOnSection(e, col.id, team.id) : undefined}
-                      >
-                        {/* Team Header */}
-                        <div className={`${styles.section} rounded-md mb-2 relative group min-h-[32px]`}>
-                          {editingTeam === team.id && !isPreview ? (
-                            <div className="px-8 py-2">
-                              <input
-                                type="text"
-                                defaultValue={team.name}
-                                autoFocus={isFirstColumn}
-                                onFocus={(e) => e.target.select()}
-                                onBlur={(e) => {
-                                  if (isFirstColumn) { updateTeamName(team.id, e.target.value); setEditingTeam(null); }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") e.target.blur();
-                                  if (e.key === "Escape") setEditingTeam(null);
-                                }}
-                                readOnly={!isFirstColumn}
-                                className="text-xs font-bold text-stone-900 text-center bg-white border border-stone-500 rounded px-2 py-0.5 w-full"
-                              />
-                            </div>
-                          ) : (
-                            <h3
-                              className={`text-xs font-bold tracking-wide text-stone-900 text-center px-8 py-2 m-0 flex items-center justify-center min-h-[32px] ${!isPreview ? "cursor-text hover:underline decoration-dotted underline-offset-2" : ""}`}
-                              onMouseDown={!isPreview ? (e) => { e.preventDefault(); setEditingTeam(team.id); } : undefined}
-                              title={!isPreview ? "Click to edit team name" : undefined}
-                            >
-                              <span>{team.name}</span>
-                            </h3>
-                          )}
-                          {/* Delete team button — only in first column, not in preview */}
-                          {!isPreview && isFirstColumn && editingTeam !== team.id && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); deleteTeam(team.id); }}
-                              className="absolute left-1.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Delete team (must be empty)"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                          {/* Add item button */}
-                          {!isPreview && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setAddingTo({ columnId: col.id, teamId: team.id }); }}
-                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-900 hover:bg-white/50 rounded w-5 h-5 flex items-center justify-center transition-colors"
-                              title="Add item"
-                            >
-                              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Team Items */}
-                        <div className="space-y-1.5">
-                          {teamItems.map((item) => {
-                            const isDragOver = dragOverId === item.id;
-                            const flagClass = flagStyles[item.flag] || "";
-                            const { pill, cleanText } = getItemDisplay(item);
-                            const isExpanded = expandedItem === item.id;
-                            return (
-                              <div
-                                key={item.id}
-                                draggable={!isPreview}
-                                onDragStart={!isPreview ? () => handleDragStart(item) : undefined}
-                                onDragOver={!isPreview ? (e) => handleDragOverItem(e, item) : undefined}
-                                onDrop={!isPreview ? (e) => handleDrop(e, item) : undefined}
-                                onDragEnd={!isPreview ? handleDragEnd : undefined}
-                                onClick={() => setExpandedItem(item.id)}
-                                className={`
-                                  group relative rounded-md border px-2 py-1.5 text-xs transition-all cursor-pointer
-                                  ${item.flag ? flagClass : styles.item}
-                                  ${isDragOver ? "ring-2 ring-stone-800 translate-y-0.5" : ""}
-                                  ${dragItem?.id === item.id ? "opacity-40" : ""}
-                                `}
-                              >
-                                {/* Collapsed header row */}
-                                <div className="flex items-center gap-1.5">
-                                  {!isPreview && !isExpanded && (
-                                    <GripVertical className="w-3 h-3 text-stone-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  )}
-                                  {item.tag && (
-                                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${getTagStyle(item.tag)}`}>
-                                      {item.tag}
-                                    </span>
-                                  )}
-                                  <span className="flex-1 leading-snug flex flex-wrap items-center gap-1 min-w-0">
-                                    <span className="truncate">{cleanText}</span>
-                                    {pill && (
-                                      <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">
-                                        {pill}
-                                      </span>
-                                    )}
-                                  </span>
-                                  {/* Notes indicator */}
-                                  {item.description && !isExpanded && (
-                                    <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-stone-400" title="Has notes" />
-                                  )}
-                                  {/* JIRA badge */}
-                                  {item.jiraUrl && (
-                                    <a
-                                      href={item.jiraUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-white font-bold text-[8px] hover:opacity-75 transition-opacity"
-                                      style={{ backgroundColor: "#0052CC" }}
-                                      title={`JIRA: ${item.jiraUrl}`}
-                                    >J</a>
-                                  )}
-                                  {/* Confluence badge */}
-                                  {item.confluenceUrl && (
-                                    <a
-                                      href={item.confluenceUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-white font-bold text-[8px] hover:opacity-75 transition-opacity"
-                                      style={{ backgroundColor: "#0065FF" }}
-                                      title={`Confluence: ${item.confluenceUrl}`}
-                                    >C</a>
-                                  )}
-                                  <div className="relative flex-shrink-0">
-                                    <button
-                                      onClick={!isPreview ? (e) => { e.stopPropagation(); setFlagPickerOpen(flagPickerOpen === item.id ? null : item.id); } : (e) => e.stopPropagation()}
-                                      className={`flex-shrink-0 transition-opacity ${!isPreview ? "opacity-60 hover:opacity-100" : "opacity-40 cursor-default"}`}
-                                      title={!isPreview ? "Set status" : undefined}
-                                    >
-                                      <Circle className={`w-3 h-3 ${
-                                        item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                                        item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                                        item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                                        item.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                                        "text-stone-300"
-                                      }`} />
-                                    </button>
-                                    {flagPickerOpen === item.id && (
-                                      <>
-                                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setFlagPickerOpen(null); }} />
-                                        <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-stone-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
-                                          {STATUS_OPTIONS.map((opt) => (
-                                            <button
-                                              key={String(opt.flag)}
-                                              onClick={(e) => { e.stopPropagation(); setFlag(item.id, opt.flag); setFlagPickerOpen(null); }}
-                                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono hover:bg-stone-50 transition-colors ${item.flag === opt.flag ? "bg-stone-50 font-bold" : ""}`}
-                                            >
-                                              <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
-                                              {opt.label}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                                  {!isPreview && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: item.id, text: item.text }); }}
-                                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-600"
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-
-                              </div>
-                            );
-                          })}
-
-                          {/* Add Item Form */}
-                          {isAdding && (() => {
-                            const liveTag = extractTag(newItemText.trim()).tag;
-                            const liveStyle = liveTag ? getTagStyle(liveTag) : null;
-                            return (
-                              <div className="rounded-md border-2 border-dashed border-stone-400 p-2 bg-white space-y-1.5">
-                                <div className="flex items-center gap-1.5">
-                                  {liveTag && (
-                                    <span className={`font-bold text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${liveStyle}`}>
-                                      {liveTag}
-                                    </span>
-                                  )}
-                                  <input
-                                    type="text"
-                                    value={newItemText}
-                                    onChange={(e) => setNewItemText(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") addItem(col.id, team.id);
-                                      if (e.key === "Escape") { setAddingTo(null); setNewItemText(""); }
-                                    }}
-                                    autoFocus
-                                    placeholder="FR: feature name, or just a title…"
-                                    className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5"
-                                  />
-                                </div>
-                                <div className="flex gap-1.5 justify-end">
-                                  <button
-                                    onClick={() => { setAddingTo(null); setNewItemText(""); }}
-                                    className="text-[10px] px-2 py-0.5 text-stone-600 hover:text-stone-900"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => addItem(col.id, team.id)}
-                                    className="text-[10px] px-2 py-0.5 bg-stone-800 text-white rounded hover:bg-stone-700"
-                                  >
-                                    Add
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {displayData.teams.map((team) => renderTeamBlock(col, styles, team))}
                 </div>
               </div>
             );
