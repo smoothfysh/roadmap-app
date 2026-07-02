@@ -67,6 +67,16 @@ Stored in `localStorage` under key `roadmap-data` (or `roadmap-data-{scope}` for
 - `public/CNAME` contains `roadmap.cadence-x.com` — do not remove or the custom domain breaks.
 - `public/roadmap.csv` is the seed CSV loaded on first visit (before any `localStorage` exists). Updating this file and deploying changes what new visitors see.
 
+## Do not break
+
+The user has repeatedly flagged these as critical — never change their behaviour as a side effect of unrelated work:
+
+- **Top-of-screen CTA** — the primary action bar at the top of the board.
+- **Sharing** — `handleShare` / `encodeShareData` / `decodeShareData` (App.jsx, "Share encoding" section). The `#share=<compressed>` URL flow must keep working end to end.
+- **Saving** — `exportBackup` / `handleBackupImport` (Backup button + JSON import), and the `_savedCopy` path that lets a shared preview be saved as a named local copy in `localStorage`.
+
+If a change touches any of the above, call it out explicitly before making it.
+
 ## Version
 
-Footer displays `v1.0.0` (hardcoded in the JSX footer). Bump manually when deploying significant changes.
+`APP_VERSION` (App.jsx, top of file) is derived from `package.json`'s `version` field — not hardcoded. Bump `package.json` when deploying significant changes; the footer picks it up automatically.
