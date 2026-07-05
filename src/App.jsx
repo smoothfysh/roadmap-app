@@ -476,6 +476,54 @@ function extractTag(text) {
   return { tag: null, text };
 }
 
+// ---------- Team detail (markdown-lite) ----------
+// Team rosters are stored as freeform text on team.detail and rendered with a
+// small markup: **bold** · ~~struck out~~ (people who left) · "1." or "-" list
+// items · @Name mention pills · "->" arrows. A whole-line **bold** is a heading.
+function escapeTeamHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inlineTeamFmt(s) {
+  let t = escapeTeamHtml(s);
+  t = t.replace(/->/g, "→");
+  t = t.replace(/~~(.+?)~~/g, '<del class="text-stone-400 line-through">$1</del>');
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-stone-900">$1</strong>');
+  t = t.replace(
+    /@([A-Z][\wÀ-ÿ'’.-]*(?:\s+[A-Z][\wÀ-ÿ'’.-]*)*)/g,
+    '<span class="bg-stone-200 text-stone-600 font-medium px-1.5 py-px rounded whitespace-nowrap">@$1</span>'
+  );
+  return t;
+}
+// Builds an HTML string for dangerouslySetInnerHTML. Numbering runs continuously
+// across all sections; struck-out entries show a bullet and are not counted.
+function renderTeamDetailHtml(detail) {
+  const lines = (detail || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  let counter = 0;
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    if (!line.trim()) { out.push('<div class="h-2.5"></div>'); continue; }
+    if (/^\*\*.+\*\*$/.test(line.trim())) {
+      out.push('<div class="text-[13px] font-bold text-stone-900 mt-3 mb-1">' + inlineTeamFmt(line.trim().replace(/^\*\*|\*\*$/g, "")) + "</div>");
+      continue;
+    }
+    const m = line.match(/^\s*(?:\d+\.|[-*])\s+(.*)$/);
+    if (m) {
+      const struck = /^\s*~~/.test(m[1]);
+      const marker = struck ? "•" : (++counter) + ".";
+      out.push('<div class="flex gap-2 text-[13px] leading-snug text-stone-800 py-px"><span class="text-stone-400 min-w-[16px] text-right tabular-nums">' + marker + "</span><span>" + inlineTeamFmt(m[1]) + "</span></div>");
+    } else {
+      out.push('<div class="text-[13px] leading-snug text-stone-800 py-px">' + inlineTeamFmt(line) + "</div>");
+    }
+  }
+  return out.join("");
+}
+// Pulls a "Devs (…)" summary line for display under the team header, if present.
+function getDevsSummary(detail) {
+  const m = (detail || "").match(/\*\*(Devs[^*]+)\*\*/i);
+  return m ? m[1].replace(/->/g, "→").trim() : "";
+}
+
 export default function RoadmapTracker() {
   const [data, setData] = useState(seedData);
   const [loading, setLoading] = useState(true);
@@ -499,9 +547,11 @@ export default function RoadmapTracker() {
   const [ganttColW, setGanttColW] = useState(96); // month column width, sized so ~9 months fill the viewport
   const [modalTab, setModalTab] = useState("details"); // "details" | "outcome"
   const initialModalTabRef = useRef("details"); // tab to land on when the modal next opens (reset after use)
+  const teamDetailDraftRef = useRef(null); // textarea holding the roster while editing in the team modal
   const [impactColIdx, setImpactColIdx] = useState(1);   // index into displayData.columns for the "by IMPACT" quarter navigator
   const [editingSubtitle, setEditingSubtitle] = useState(null);
-  const [editingTeam, setEditingTeam] = useState(null);
+  const [teamModalId, setTeamModalId] = useState(null);      // team whose detail modal is open
+  const [teamDetailEditing, setTeamDetailEditing] = useState(false); // roster edit vs view mode
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingHeading, setEditingHeading] = useState(false);
   const [sharedPreview, setSharedPreview] = useState(null);
@@ -897,6 +947,11 @@ export default function RoadmapTracker() {
     saveData({ ...data, teams: newTeams });
   };
 
+  const updateTeamDetail = (teamId, newDetail) => {
+    const newTeams = data.teams.map((t) => t.id === teamId ? { ...t, detail: newDetail } : t);
+    saveData({ ...data, teams: newTeams });
+  };
+
   const addTeam = () => {
     const name = prompt("New team name (e.g. 'PAYMENTS (Team IRIS)'):");
     if (!name || !name.trim()) return;
@@ -1004,35 +1059,19 @@ export default function RoadmapTracker() {
       >
         {/* Team Header */}
         <div className={`${styles.section} rounded-md mb-2 relative group min-h-[32px]`}>
-          {editingTeam === team.id && !isPreview ? (
-            <div className="px-8 py-2">
-              <input
-                type="text"
-                defaultValue={team.name}
-                autoFocus={isFirstColumn}
-                onFocus={(e) => e.target.select()}
-                onBlur={(e) => {
-                  if (isFirstColumn) { updateTeamName(team.id, e.target.value); setEditingTeam(null); }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.target.blur();
-                  if (e.key === "Escape") setEditingTeam(null);
-                }}
-                readOnly={!isFirstColumn}
-                className="text-xs font-bold text-stone-900 text-center bg-white border border-stone-500 rounded px-2 py-0.5 w-full"
-              />
-            </div>
-          ) : (
-            <h3
-              className={`text-xs font-bold tracking-wide text-stone-900 text-center px-8 py-2 m-0 flex items-center justify-center min-h-[32px] ${!isPreview ? "cursor-text hover:underline decoration-dotted underline-offset-2" : ""}`}
-              onMouseDown={!isPreview ? (e) => { e.preventDefault(); setEditingTeam(team.id); } : undefined}
-              title={!isPreview ? "Click to edit team name" : undefined}
-            >
-              <span>{team.name}</span>
-            </h3>
-          )}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setTeamDetailEditing(false); setTeamModalId(team.id); }}
+            title={isPreview ? "View team details" : "View & edit team details"}
+            className="w-full px-8 py-1.5 m-0 flex flex-col items-center justify-center min-h-[32px] bg-transparent cursor-pointer group/team"
+          >
+            <span className="text-xs font-bold tracking-wide text-stone-900 text-center group-hover/team:underline decoration-dotted underline-offset-2">{team.name}</span>
+            {getDevsSummary(team.detail) && (
+              <span className="text-[11px] font-semibold text-stone-600 mt-0.5">{getDevsSummary(team.detail)}</span>
+            )}
+          </button>
           {/* Delete team button — only in first column, not in preview */}
-          {!isPreview && isFirstColumn && editingTeam !== team.id && (
+          {!isPreview && isFirstColumn && (
             <button
               onClick={(e) => { e.stopPropagation(); deleteTeam(team.id); }}
               className="absolute left-1.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2037,6 +2076,121 @@ export default function RoadmapTracker() {
           );
         })()}
       </div>
+
+      {/* Team detail modal */}
+      {teamModalId && (() => {
+        const team = displayData.teams.find((t) => t.id === teamModalId);
+        if (!team) return null;
+        const closeTeamModal = () => { setTeamModalId(null); setTeamDetailEditing(false); };
+        const detailHtml = renderTeamDetailHtml(team.detail);
+        const hasDetail = (team.detail || "").trim().length > 0;
+        return (
+          <div
+            className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-6 z-50"
+            onClick={closeTeamModal}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isPreview && (
+                <div className="text-center text-[9px] font-mono font-semibold uppercase tracking-[0.25em] text-stone-400 bg-stone-50 border-b border-stone-100 py-1.5">
+                  Read Only
+                </div>
+              )}
+
+              {/* Modal header — team name (editable) */}
+              <div className="px-5 py-4 bg-emerald-50 border-b border-emerald-100 relative">
+                <button
+                  onClick={closeTeamModal}
+                  className="absolute top-3 right-3 text-stone-400 hover:text-stone-700 hover:bg-white/60 rounded p-1 transition-colors"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <label className="block text-[9px] font-mono font-semibold uppercase tracking-wider text-emerald-700/70 mb-1">
+                  Team name
+                </label>
+                {isPreview ? (
+                  <div className="text-base font-bold text-stone-900 pr-8">{team.name}</div>
+                ) : (
+                  <input
+                    key={team.id}
+                    type="text"
+                    defaultValue={team.name}
+                    onBlur={(e) => updateTeamName(team.id, e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                    className="w-full text-base font-bold text-stone-900 bg-white/60 hover:bg-white focus:bg-white border border-transparent hover:border-emerald-200 focus:border-emerald-400 rounded-md px-2 py-1 pr-8 outline-none transition-colors"
+                  />
+                )}
+              </div>
+
+              {/* Modal body — roster */}
+              <div className="px-5 py-4 overflow-y-auto">
+                {teamDetailEditing && !isPreview ? (
+                  <>
+                    <textarea
+                      ref={teamDetailDraftRef}
+                      defaultValue={team.detail || ""}
+                      autoFocus
+                      spellCheck={false}
+                      className="w-full min-h-[300px] font-mono text-[12.5px] leading-relaxed text-stone-800 border border-stone-300 focus:border-emerald-400 rounded-lg p-3 outline-none resize-y"
+                    />
+                    <div className="mt-2 text-[11px] leading-relaxed text-stone-500 bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
+                      <span className="font-semibold text-stone-600">Markup:</span>{" "}
+                      <code className="bg-stone-200 px-1 rounded">**bold**</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">~~struck out~~</code> (people who left, not counted) ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">1.</code> or <code className="bg-stone-200 px-1 rounded">-</code> lists (auto-numbered continuously) ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">@Name</code> → mention · <code className="bg-stone-200 px-1 rounded">-&gt;</code> → arrow. A whole line in <code className="bg-stone-200 px-1 rounded">**bold**</code> is a heading.
+                    </div>
+                  </>
+                ) : hasDetail ? (
+                  <div dangerouslySetInnerHTML={{ __html: detailHtml }} />
+                ) : (
+                  <div className="text-[13px] italic text-stone-400 py-2">
+                    {isPreview ? "No team details." : "No details yet. Click “Edit details” to add the team roster."}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal footer */}
+              {!isPreview && (
+                <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between gap-3">
+                  {teamDetailEditing ? (
+                    <>
+                      <button
+                        onClick={() => setTeamDetailEditing(false)}
+                        className="text-[12.5px] text-stone-500 hover:text-stone-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          updateTeamDetail(team.id, teamDetailDraftRef.current?.value ?? "");
+                          setTeamDetailEditing(false);
+                        }}
+                        className="text-[13px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Save details
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[11px] text-stone-400">Name saves automatically</span>
+                      <button
+                        onClick={() => setTeamDetailEditing(true)}
+                        className="text-[13px] font-semibold text-stone-700 border border-stone-300 hover:bg-stone-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        ✎ Edit details
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Item modal */}
       {expandedItem && (() => {
