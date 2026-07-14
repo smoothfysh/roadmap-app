@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="cadence-x-logo.png" />
+<title>Roadmap App — FAQ &amp; Data Storage</title>
+<style>
+  :root {
+    --stone-50: #fafaf9;
+    --stone-100: #f5f5f4;
+    --stone-200: #e7e5e4;
+    --stone-300: #d6d3d1;
+    --stone-400: #a8a29e;
+    --stone-500: #78716c;
+    --stone-600: #57534e;
+    --stone-700: #44403c;
+    --stone-800: #292524;
+    --stone-900: #1c1917;
+    --violet-50: #f5f3ff;
+    --violet-100: #ede9fe;
+    --violet-300: #c4b5fd;
+    --violet-600: #7c3aed;
+    --violet-700: #6d28d9;
+    --emerald-50: #ecfdf5;
+    --emerald-300: #6ee7b7;
+    --emerald-700: #047857;
+    --amber-50: #fffbeb;
+    --amber-300: #fcd34d;
+    --amber-800: #92400e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--stone-50);
+    color: var(--stone-800);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .brand img {
+    width: 34px;
+    height: 34px;
+    display: block;
+  }
+  .brand span {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--stone-700);
+  }
+  a.back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--stone-500);
+    text-decoration: none;
+    margin-bottom: 28px;
+  }
+  a.back:hover { color: var(--stone-800); }
+  .eyebrow {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--stone-500);
+    border: 1px solid var(--stone-300);
+    display: inline-block;
+    padding: 4px 8px;
+    background: #fff;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--stone-900);
+    margin: 0 0 8px;
+  }
+  .sub {
+    color: var(--stone-500);
+    font-size: 15px;
+    margin: 0 0 32px;
+  }
+  .callout {
+    border: 1px solid var(--emerald-300);
+    background: var(--emerald-50);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 36px;
+  }
+  .callout .label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--emerald-700);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .callout p { margin: 0; color: var(--stone-800); font-size: 14.5px; }
+  .callout p + p { margin-top: 8px; }
+  h2 {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--stone-600);
+    font-weight: 700;
+    margin: 40px 0 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--stone-200);
+  }
+  .faq {
+    border: 1px solid var(--stone-200);
+    background: #fff;
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-top: 14px;
+  }
+  .faq + .faq { margin-top: 12px; }
+  .faq h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--stone-900);
+    margin: 0 0 8px;
+  }
+  .faq p { margin: 0 0 10px; font-size: 14px; color: var(--stone-700); }
+  .faq p:last-child { margin-bottom: 0; }
+  .faq ul { margin: 0 0 10px; padding-left: 20px; font-size: 14px; color: var(--stone-700); }
+  .faq ul:last-child { margin-bottom: 0; }
+  .faq li { margin-bottom: 4px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--stone-100);
+    border: 1px solid var(--stone-200);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .tag {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    border-radius: 5px;
+    padding: 2px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .tag.local { background: var(--stone-100); color: var(--stone-600); border: 1px solid var(--stone-300); }
+  .tag.optin { background: var(--amber-50); color: var(--amber-800); border: 1px solid var(--amber-300); }
+  .tag.device { background: var(--violet-50); color: var(--violet-700); border: 1px solid var(--violet-300); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-size: 13px;
+    background: #fff;
+    border: 1px solid var(--stone-200);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--stone-100);
+    vertical-align: top;
+  }
+  th {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--stone-500);
+    background: var(--stone-50);
+  }
+  tr:last-child td { border-bottom: none; }
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--stone-200);
+    font-size: 12px;
+    color: var(--stone-400);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="cadence-x-logo.png" alt="Cadence X logo" />
+      <span>Cadence X</span>
+    </div>
+
+    <a class="back" href="javascript:history.length > 1 ? history.back() : window.close()">&larr; Back to roadmap</a>
+
+    <div class="eyebrow">FAQ</div>
+    <h1>Where does my data go?</h1>
+    <p class="sub">A plain-language explanation of how this app stores your roadmap — written so you can decide what's safe to type in.</p>
+
+    <div class="callout">
+      <div class="label">Short answer</div>
+      <p><strong>Nothing leaves your computer unless you explicitly choose to share or publish it.</strong> By default this app keeps your roadmap in your browser's local storage only — no account, no server, no sign-in. The only ways any data ever leaves your device are the <strong>Share</strong> link and the <strong>Cloud</strong> save/publish feature, both of which require you to click a button first.</p>
+    </div>
+
+    <h2>The basics</h2>
+
+    <div class="faq">
+      <h3>Where is my roadmap actually stored? <span class="tag local">Default</span></h3>
+      <p>In your browser's <strong>local storage</strong> — a small private storage area that every website gets, tied to this exact browser on this exact device.</p>
+      <ul>
+        <li>Your default roadmap is saved under the key <code>roadmap-data</code>.</li>
+        <li>If you're viewing a named copy (a URL with <code>?scope=name</code>), it's saved separately under <code>roadmap-data-name</code> so it never overwrites your main board.</li>
+        <li>It's saved automatically every time you make a change — there's no "save" button to remember to click.</li>
+      </ul>
+    </div>
+
+    <div class="faq">
+      <h3>Does that mean it's only on this one computer?</h3>
+      <p>Yes. Local storage is not synced between devices or browsers — it doesn't even follow you if you switch from Chrome to Edge on the <em>same</em> computer. Your roadmap on your work laptop and your roadmap on your home computer are two entirely separate copies unless you deliberately move data between them (via Backup JSON, Share link, or Cloud).</p>
+    </div>
+
+    <div class="faq">
+      <h3>What happens if I close the tab, restart my laptop, or come back next week?</h3>
+      <p>Nothing changes — local storage persists across restarts and browser closes indefinitely. It only disappears if:</p>
+      <ul>
+        <li>you (or your IT policy) clear browsing data / site data for this domain,</li>
+        <li>you use a private/incognito window (cleared when the window closes),</li>
+        <li>or you use a different browser or device.</li>
+      </ul>
+      <p>If any of those apply to you, use <strong>Backup JSON</strong> (in the Actions menu) to save a copy you control.</p>
+    </div>
+
+    <h2>Sharing a link</h2>
+
+    <div class="faq">
+      <h3>When I click "Share as URL," is my roadmap uploaded somewhere? <span class="tag optin">Opt-in</span></h3>
+      <p>No. Your entire board (columns, teams, items) is compressed and encoded directly <em>into the link itself</em>, after <code>#share=</code>. No server is involved in generating it — it's built in your browser.</p>
+      <p>The data only "exists" wherever you paste that link. If you never send it to anyone, it never leaves your machine. If you paste it into Slack or email, the data travels exactly as far as that link does — and only that far.</p>
+    </div>
+
+    <h2>Cloud saving &amp; publishing</h2>
+
+    <div class="faq">
+      <h3>What does the "Cloud" button do? <span class="tag optin">Opt-in</span></h3>
+      <p>This is the one feature that stores data on a server (Supabase, a hosted database) rather than only in your browser — but only for roadmaps you explicitly choose to save there. Nothing is sent to the cloud until you click <strong>Cloud</strong>.</p>
+      <p>There is no login and no user account. Instead, each cloud roadmap gets:</p>
+      <ul>
+        <li>a random <strong>id</strong> — used for view links,</li>
+        <li>a secret <strong>edit key</strong> — generated in your browser and required to make changes.</li>
+      </ul>
+      <p>Ownership isn't tied to "you" as a person — it's tied to whoever holds that secret key. Your browser keeps a local list of your own cloud roadmaps (their ids + keys) so you can find them again; that list itself lives in local storage, same as everything else.</p>
+    </div>
+
+    <div class="faq">
+      <h3>What's the difference between saving and publishing?</h3>
+      <p>Cloud roadmaps keep <strong>two copies</strong> on the server:</p>
+      <ul>
+        <li><strong>Working copy</strong> — private, auto-saved as you edit. Only readable with your secret edit key.</li>
+        <li><strong>Published copy</strong> — what a view-only link shows to colleagues. It only updates when you click <strong>Publish</strong>.</li>
+      </ul>
+      <p>So colleagues with a view link never see half-finished edits — they see whatever you last published.</p>
+    </div>
+
+    <div class="faq">
+      <h3>What exactly gets stored in the cloud?</h3>
+      <p>Just the roadmap content itself — title, columns, teams, and items, as plain data. No account details, no email address, no tracking, no login credentials — there's nothing to enter, because there's no account.</p>
+    </div>
+
+    <h2>Manual export/import</h2>
+
+    <div class="faq">
+      <h3>What about "Backup JSON," "Restore JSON," "Export CSV," and "Import CSV"?</h3>
+      <p>These save a file to your own computer's downloads folder (or read one back in) — the same as saving a Word document. The app doesn't upload these files anywhere; they only exist wherever you choose to keep them afterwards.</p>
+    </div>
+
+    <h2>At a glance</h2>
+
+    <table>
+      <thead>
+        <tr><th>Action</th><th>Where the data goes</th><th>Leaves this device?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Normal editing</td><td>Browser local storage</td><td>No</td></tr>
+        <tr><td>Backup JSON / Export CSV</td><td>A file you save yourself</td><td>Only if you send that file</td></tr>
+        <tr><td>Share as URL</td><td>Encoded inside the link you generate</td><td>Only if you send that link</td></tr>
+        <tr><td>Cloud (save)</td><td>Private "working copy" in Supabase, key-gated</td><td>Yes — opt-in, click required</td></tr>
+        <tr><td>Publish</td><td>Public "published copy" in Supabase, viewable by anyone with the id</td><td>Yes — opt-in, click required</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout" style="margin-top:32px;">
+      <div class="label">Bottom line</div>
+      <p>If you never click <strong>Share</strong> or <strong>Cloud</strong>, your roadmap lives only in this browser, on this device, and nowhere else. You're always in control of the moment anything leaves your machine.</p>
+    </div>
+
+    <footer>Roadmap App — this page describes app behaviour only and is not legal advice.</footer>
+  </div>
+</body>
+</html>
