@@ -25,3 +25,9 @@ dist-ssr
 
 # Vite cache
 .vite
+
+# Local per-version rollback snapshots of App.jsx (git history is the real version history)
+src/App.[0-9]*.jsx
+
+# Local dev tooling config
+.claude/

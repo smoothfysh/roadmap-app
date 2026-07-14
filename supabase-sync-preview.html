@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supabase Sync (no-login) — Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; min-height: 100vh; }
+
+    .btn { font-family: inherit; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 14px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; transition: all 0.12s; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+    .btn-dark { background: #1c1917; color: #fff; } .btn-dark:hover { background: #292524; }
+    .btn-light { background: #fff; color: #44403c; border-color: #d6d3d1; } .btn-light:hover { border-color: #78716c; color: #1c1917; }
+    .btn-violet { background: #6d28d9; color: #fff; } .btn-violet:hover { background: #5b21b6; }
+    .btn-amber { background: #f59e0b; color: #1c1917; } .btn-amber:hover { background: #d97706; color:#fff; }
+    .btn-ghost { background: none; color: #78716c; } .btn-ghost:hover { color: #1c1917; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn.full { width: 100%; }
+
+    .input { width: 100%; font-family: inherit; font-size: 12px; color: #1c1917; border: 1px solid #d6d3d1; border-radius: 7px; padding: 9px 11px; background: #fff; outline: none; }
+    .input:focus { border-color: #a78bfa; }
+    .label { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #a8a29e; margin-bottom: 6px; }
+
+    /* topbar */
+    .topbar { display: flex; align-items: center; gap: 14px; background: #fff; border-bottom: 1px solid #e7e5e4; padding: 11px 20px; position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
+    .wordmark { font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    .wordmark .dot { color: #6d28d9; }
+    .no-acct { font-size: 9px; color: #a8a29e; letter-spacing: 0.06em; border: 1px solid #e7e5e4; border-radius: 20px; padding: 3px 9px; }
+
+    /* cloud status cluster (in board topbar) */
+    .cloud { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .sync { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: #16a34a; }
+    .sync .spin { width: 11px; height: 11px; border: 2px solid #d1fae5; border-top-color: #16a34a; border-radius: 50%; animation: spin 0.8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+    .pill-unpub { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 20px; padding: 4px 10px; }
+    .dot-amber { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; }
+    .pill-pub { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 20px; padding: 4px 10px; }
+    .dot-green { width: 7px; height: 7px; border-radius: 50%; background: #10b981; }
+
+    /* board faint bg */
+    .board { padding: 26px 20px 100px; }
+    .board-hint { max-width: 1000px; margin: 0 auto; border: 1px dashed #d6d3d1; border-radius: 10px; min-height: 300px; display: flex; align-items: center; justify-content: center; color: #a8a29e; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; background: linear-gradient(90deg,#f0fdf4 0 25%,#eff6ff 25% 50%,#fffbeb 50% 75%,#f8fafc 75% 100%); opacity: 0.45; }
+
+    /* dashboard */
+    .dash { max-width: 1000px; margin: 0 auto; padding: 26px 20px 90px; }
+    .dash-title { font-size: 20px; font-weight: 900; letter-spacing: -0.01em; }
+    .dash-sub { font-size: 11px; color: #a8a29e; margin-top: 4px; }
+    .keys-banner { display: flex; align-items: center; gap: 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 11px 14px; margin: 18px 0 22px; font-size: 11px; color: #92400e; line-height: 1.5; }
+    .keys-banner .warn { font-size: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.14s; display: flex; flex-direction: column; gap: 10px; }
+    .card:hover { border-color: #a78bfa; box-shadow: 0 8px 24px rgba(109,40,217,0.08); transform: translateY(-2px); }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .card-title { font-size: 14px; font-weight: 700; line-height: 1.35; }
+    .badge { font-size: 8px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; padding: 3px 7px; border-radius: 5px; white-space: nowrap; display:inline-flex; align-items:center; gap:4px; }
+    .badge-pub { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+    .badge-unpub { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .card-meta { font-size: 10px; color: #a8a29e; }
+    .card-actions { display: flex; gap: 6px; border-top: 1px solid #f5f5f4; padding-top: 10px; flex-wrap: wrap; }
+    .mini-btn { font-family: inherit; font-size: 9px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #78716c; background: none; border: 1px solid #e7e5e4; border-radius: 5px; padding: 5px 8px; cursor: pointer; transition: all 0.1s; display:inline-flex; align-items:center; gap:4px; }
+    .mini-btn:hover { border-color: #a78bfa; color: #6d28d9; }
+    .mini-btn.warnk { color: #b45309; border-color:#fde68a; } .mini-btn.warnk:hover { background:#fffbeb; }
+    .new-card { border: 1px dashed #c4b5fd; background: #faf9ff; align-items: center; justify-content: center; text-align: center; color: #6d28d9; min-height: 120px; gap: 8px; }
+    .new-card:hover { background: #f5f3ff; border-color: #a78bfa; }
+    .new-plus { font-size: 24px; line-height: 1; }
+
+    /* modal */
+    .backdrop { position: fixed; inset: 0; background: rgba(28,25,23,0.55); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+    .backdrop.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.28); width: 100%; max-width: 460px; overflow: hidden; animation: pop 0.15s ease-out; }
+    @keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(6px);} to { opacity: 1; transform: scale(1) translateY(0);} }
+    .modal-h { padding: 16px 20px 12px; border-bottom: 1px solid #e7e5e4; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .modal-h h3 { font-size: 15px; font-weight: 700; } .modal-h .eb { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #6d28d9; margin-bottom: 5px; }
+    .modal-b { padding: 18px 20px; }
+    .modal-f { padding: 12px 20px; border-top: 1px solid #e7e5e4; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .modal-close { background: none; border: none; font-size: 18px; color: #a8a29e; cursor: pointer; }
+
+    .link-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .link-field { flex: 1; font-family: inherit; font-size: 11px; color: #44403c; border: 1px solid #d6d3d1; border-radius: 6px; padding: 8px 10px; background: #fafaf9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .warn-box { display: flex; gap: 8px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px; font-size: 11px; color: #92400e; line-height: 1.55; margin: 10px 0; }
+    .safe-box { display: flex; gap: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 10px 12px; font-size: 11px; color: #065f46; line-height: 1.55; margin: 10px 0; }
+    .check-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; font-size: 11px; color: #57534e; line-height: 1.5; cursor: pointer; }
+    .check-row input { margin-top: 2px; }
+    .share-section { margin-bottom: 18px; }
+    .share-section h4 { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+    .share-section .desc { font-size: 10px; color: #a8a29e; margin-bottom: 8px; line-height: 1.5; }
+
+    /* viewer bar */
+    .viewer-bar { display:flex; align-items:center; gap:12px; background:#1c1917; color:#fff; padding:9px 18px; font-size:11px; flex-wrap:wrap; }
+    .viewer-bar .live { display:inline-flex; align-items:center; gap:6px; color:#6ee7b7; }
+    .viewer-bar .live .dot-green { box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
+    .viewer-bar .ro { color:#a8a29e; }
+
+    .demo { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 100; background: rgba(255,255,255,0.92); backdrop-filter: blur(6px); padding: 8px 12px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); border: 1px solid #e7e5e4; flex-wrap: wrap; justify-content: center; }
+    .demo span { font-size: 9px; color: #a8a29e; letter-spacing: 0.1em; text-transform: uppercase; align-self: center; }
+    .demo button { font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; background: #1c1917; color: #fff; border: none; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+    .demo button.sec { background: #fff; color: #44403c; border: 1px solid #d6d3d1; }
+  </style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- Create → edit-link safety modal -->
+<div class="backdrop" id="createBackdrop" onclick="if(event.target===this) closeCreate()">
+  <div class="modal">
+    <div class="modal-h">
+      <div><div class="eb">✓ Roadmap created</div><h3>Save your edit link</h3></div>
+      <button class="modal-close" onclick="closeCreate()">&#x2715;</button>
+    </div>
+    <div class="modal-b">
+      <div class="warn-box">
+        <span>🔑</span>
+        <span><strong>This link is the only way to edit this roadmap later.</strong> There are no accounts — save it now (bookmark or password manager). We can’t recover it for you.</span>
+      </div>
+      <label class="label">Your private edit link</label>
+      <div class="link-row">
+        <div class="link-field">roadmap.cadence-x.com/?id=r_8Kq2x9v&key=•••••••••••••</div>
+        <button class="btn btn-violet" onclick="this.textContent='Copied ✓'">Copy</button>
+      </div>
+      <label class="check-row"><input type="checkbox" id="savedChk" onchange="document.getElementById('openBtn').disabled=!this.checked" /> I’ve saved my edit link somewhere safe</label>
+    </div>
+    <div class="modal-f">
+      <button class="btn btn-ghost" onclick="closeCreate()">Cancel</button>
+      <button class="btn btn-dark" id="openBtn" disabled onclick="closeCreate(); render('board')">Open roadmap →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share panel -->
+<div class="backdrop" id="shareBackdrop" onclick="if(event.target===this) closeShare()">
+  <div class="modal">
+    <div class="modal-h">
+      <div><div class="eb">Share</div><h3>Demand Growth Streams</h3></div>
+      <button class="modal-close" onclick="closeShare()">&#x2715;</button>
+    </div>
+    <div class="modal-b">
+      <div class="share-section">
+        <h4>🌐 View link — safe to send</h4>
+        <div class="desc">Anyone with this link can view the <strong>published</strong> version, live. They can’t edit.</div>
+        <div class="link-row">
+          <div class="link-field">roadmap.cadence-x.com/?id=r_8Kq2x9v</div>
+          <button class="btn btn-dark" onclick="this.textContent='Copied ✓'">Copy</button>
+        </div>
+      </div>
+      <div class="share-section" style="margin-bottom:0;">
+        <h4>🔑 Edit link — keep private</h4>
+        <div class="desc">Full edit access, and your only way back in. Don’t share it — save it for yourself.</div>
+        <div class="link-row">
+          <div class="link-field">roadmap.cadence-x.com/?id=r_8Kq2x9v&key=•••••••••••••</div>
+          <button class="btn btn-amber" onclick="this.textContent='Copied ✓'">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="demo">
+  <span>Preview:</span>
+  <button onclick="render('list')">1 · My roadmaps</button>
+  <button class="sec" onclick="render('list'); openCreate()">2 · Create (save key)</button>
+  <button class="sec" onclick="render('board')">3 · Board + cloud</button>
+  <button class="sec" onclick="render('board'); openShare()">4 · Share panel</button>
+  <button class="sec" onclick="render('viewer')">5 · Viewer (read-only)</button>
+</div>
+
+<script>
+  const root = () => document.getElementById('root');
+  let published = false; // board publish state
+
+  function render(state) {
+    if (state === 'list')   return renderList();
+    if (state === 'board')  return renderBoard();
+    if (state === 'viewer') return renderViewer();
+  }
+
+  function card(title, isPub, meta) {
+    return `<div class="card" onclick="render('board')">
+      <div class="card-top">
+        <div class="card-title">${title}</div>
+        ${isPub ? '<span class="badge badge-pub"><span class="dot-green"></span>Published</span>'
+                : '<span class="badge badge-unpub"><span class="dot-amber"></span>Unpublished</span>'}
+      </div>
+      <div class="card-meta">${meta}</div>
+      <div class="card-actions">
+        <button class="mini-btn" onclick="event.stopPropagation(); render('board')">Open</button>
+        <button class="mini-btn" onclick="event.stopPropagation(); openShare()">🌐 View link</button>
+        <button class="mini-btn warnk" onclick="event.stopPropagation(); this.textContent='🔑 Copied ✓'" title="Your only way back in — keep it safe">🔑 Edit link</button>
+      </div>
+    </div>`;
+  }
+
+  function renderList() {
+    root().innerHTML = `
+      <div class="topbar">
+        <div class="wordmark">Roadmap<span class="dot">.</span></div>
+        <div class="no-acct" style="margin-left:auto;">No account needed</div>
+      </div>
+      <div class="dash">
+        <div class="dash-title">My roadmaps</div>
+        <div class="dash-sub">Stored on this browser · auto-saved to the cloud · published copy is what others see</div>
+        <div class="keys-banner">
+          <span class="warn">🔑</span>
+          <span><strong>No accounts here.</strong> Your edit links are the only way to edit these later — and this list lives only in this browser. Keep your edit links saved somewhere safe.
+          <button class="mini-btn warnk" style="margin-left:8px;" onclick="this.textContent='Copied all ✓'">Copy all edit links</button></span>
+        </div>
+        <div class="grid">
+          <div class="new-card card" onclick="openCreate()">
+            <div class="new-plus">+</div>
+            <div style="font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">New roadmap</div>
+          </div>
+          ${card('Demand Growth Streams', true,  'Published 2h ago · 1 unpublished change')}
+          ${card('Core Adjacent Revenue', false, 'Auto-saved yesterday · never published')}
+          ${card('Q4 Monetisation Bets',  true,  'Published 3d ago')}
+        </div>
+      </div>`;
+  }
+
+  function renderBoard() {
+    root().innerHTML = `
+      <div class="topbar">
+        <div class="wordmark" style="cursor:pointer;" onclick="render('list')">Roadmap<span class="dot">.</span></div>
+        <span style="font-size:12px; font-weight:600; color:#44403c;">Demand Growth Streams</span>
+        <div class="cloud">
+          <span class="sync">✓ Auto-saved</span>
+          <span id="pubState">${published
+            ? '<span class="pill-pub"><span class="dot-green"></span>Published · viewers see the latest</span>'
+            : '<span class="pill-unpub"><span class="dot-amber"></span>Unpublished changes</span>'}</span>
+          <button class="btn ${published?'btn-light':'btn-violet'}" id="pubBtn" onclick="doPublish()">${published?'Published ✓':'Publish'}</button>
+          <button class="btn btn-light" onclick="openShare()">Share</button>
+        </div>
+      </div>
+      <div class="board"><div class="board-hint">roadmap board — auto-saves privately as you edit</div></div>`;
+  }
+
+  function doPublish() {
+    published = true;
+    document.getElementById('pubState').innerHTML = '<span class="pill-pub"><span class="dot-green"></span>Published · viewers see the latest</span>';
+    const b = document.getElementById('pubBtn'); b.textContent = 'Published ✓'; b.className = 'btn btn-light';
+  }
+
+  function renderViewer() {
+    root().innerHTML = `
+      <div class="viewer-bar">
+        <div class="wordmark" style="font-size:12px;">Roadmap<span class="dot">.</span></div>
+        <span>Demand Growth Streams</span>
+        <span class="live"><span class="dot-green"></span>Live</span>
+        <span class="ro">· Read-only — updates appear automatically</span>
+        <button class="btn btn-light" style="margin-left:auto; font-size:10px; padding:6px 10px;" onclick="render('list')">Make your own →</button>
+      </div>
+      <div class="board"><div class="board-hint">published roadmap — read-only, updates live when the owner publishes</div></div>`;
+  }
+
+  function openCreate() { document.getElementById('createBackdrop').classList.add('open'); document.getElementById('savedChk').checked=false; document.getElementById('openBtn').disabled=true; }
+  function closeCreate() { document.getElementById('createBackdrop').classList.remove('open'); }
+  function openShare() { document.getElementById('shareBackdrop').classList.add('open'); }
+  function closeShare() { document.getElementById('shareBackdrop').classList.remove('open'); }
+  document.addEventListener('keydown', e => { if (e.key==='Escape'){ closeCreate(); closeShare(); } });
+
+  render('list');
+</script>
+</body>
+</html>

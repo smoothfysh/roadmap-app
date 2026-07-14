@@ -1,7 +1,7 @@
 {
   "name": "roadmap-app",
   "private": true,
-  "version": "4.3.0",
+  "version": "4.12.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.2",
     "lucide-react": "^1.8.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login + Dashboard — Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; min-height: 100vh; }
+
+    .btn {
+      font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 10px 16px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; transition: all 0.12s;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto;
+    }
+    .btn-dark { background: #1c1917; color: #fff; }
+    .btn-dark:hover { background: #292524; }
+    .btn-light { background: #fff; color: #44403c; border-color: #d6d3d1; }
+    .btn-light:hover { border-color: #78716c; color: #1c1917; }
+    .btn-violet { background: #6d28d9; color: #fff; }
+    .btn-violet:hover { background: #5b21b6; }
+    .btn-ghost { background: none; color: #78716c; }
+    .btn-ghost:hover { color: #1c1917; }
+    .btn.full { width: 100%; }
+
+    .input {
+      width: 100%; font-family: inherit; font-size: 13px; color: #1c1917;
+      border: 1px solid #d6d3d1; border-radius: 8px; padding: 11px 13px; background: #fff; outline: none;
+      transition: border-color 0.1s;
+    }
+    .input:focus { border-color: #a78bfa; }
+    .label { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #a8a29e; margin-bottom: 6px; }
+
+    /* ── Auth (centered card) ── */
+    .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .auth-card {
+      width: 100%; max-width: 380px; background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.08); padding: 32px 28px; text-align: center; animation: pop 0.15s ease-out;
+    }
+    @keyframes pop { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
+    .wordmark { font-size: 15px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 4px; }
+    .wordmark .dot { color: #6d28d9; }
+    .auth-tagline { font-size: 10px; color: #a8a29e; letter-spacing: 0.06em; margin-bottom: 26px; }
+    .auth-h { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .auth-p { font-size: 12px; color: #78716c; line-height: 1.6; margin-bottom: 20px; }
+    .auth-field { text-align: left; margin-bottom: 14px; }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: #d6d3d1; font-size: 9px; letter-spacing: 0.2em; }
+    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #e7e5e4; }
+    .auth-note { font-size: 10px; color: #a8a29e; line-height: 1.6; margin-top: 16px; }
+    .mail-icon { width: 56px; height: 56px; border-radius: 16px; background: #f5f3ff; display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto 18px; }
+    .email-strong { color: #6d28d9; font-weight: 600; }
+    .code-inputs { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; }
+    .code-box { width: 42px; height: 52px; text-align: center; font-size: 20px; font-weight: 700; border: 1px solid #d6d3d1; border-radius: 8px; outline: none; }
+    .code-box:focus { border-color: #6d28d9; }
+    .link-btn { background: none; border: none; font-family: inherit; font-size: 11px; color: #6d28d9; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+    .link-btn.muted { color: #a8a29e; }
+
+    /* ── Dashboard ── */
+    .topbar {
+      display: flex; align-items: center; gap: 14px; background: #fff; border-bottom: 1px solid #e7e5e4;
+      padding: 12px 22px; position: sticky; top: 0; z-index: 10;
+    }
+    .topbar .wordmark { margin: 0; font-size: 13px; }
+    .user-chip { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: #6d28d9; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .user-email { font-size: 11px; color: #57534e; }
+    .dash { max-width: 1000px; margin: 0 auto; padding: 28px 22px 80px; }
+    .dash-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 12px; }
+    .dash-title { font-size: 20px; font-weight: 900; letter-spacing: -0.01em; }
+    .section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #a8a29e; margin: 26px 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .card {
+      background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 16px 16px 14px; cursor: pointer;
+      transition: all 0.14s; display: flex; flex-direction: column; gap: 10px;
+    }
+    .card:hover { border-color: #a78bfa; box-shadow: 0 8px 24px rgba(109,40,217,0.08); transform: translateY(-2px); }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .card-title { font-size: 14px; font-weight: 700; line-height: 1.35; }
+    .badge { font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 5px; white-space: nowrap; }
+    .badge-owner  { background: #f5f3ff; color: #6d28d9; border: 1px solid #ede9fe; }
+    .badge-editor { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+    .badge-viewer { background: #f5f5f4; color: #78716c; border: 1px solid #e7e5e4; }
+    .card-meta { display: flex; align-items: center; gap: 12px; font-size: 10px; color: #a8a29e; flex-wrap: wrap; }
+    .meta-item { display: inline-flex; align-items: center; gap: 4px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.18); }
+    .collab-stack { display: flex; }
+    .collab { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: #fff; margin-left: -6px; }
+    .collab:first-child { margin-left: 0; }
+    .card-actions { display: flex; gap: 6px; border-top: 1px solid #f5f5f4; padding-top: 10px; margin-top: 2px; }
+    .mini-btn { font-family: inherit; font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #78716c; background: none; border: 1px solid #e7e5e4; border-radius: 5px; padding: 5px 9px; cursor: pointer; transition: all 0.1s; }
+    .mini-btn:hover { border-color: #a78bfa; color: #6d28d9; }
+    .new-card {
+      border: 1px dashed #c4b5fd; background: #faf9ff; align-items: center; justify-content: center; text-align: center;
+      color: #6d28d9; min-height: 130px; gap: 8px;
+    }
+    .new-card:hover { background: #f5f3ff; border-color: #a78bfa; }
+    .new-plus { font-size: 26px; line-height: 1; }
+
+    /* ── modal (invite) ── */
+    .backdrop { position: fixed; inset: 0; background: rgba(28,25,23,0.55); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+    .backdrop.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.28); width: 100%; max-width: 440px; overflow: hidden; animation: pop 0.15s ease-out; }
+    .modal-h { padding: 16px 20px; border-bottom: 1px solid #e7e5e4; display: flex; align-items: center; justify-content: space-between; }
+    .modal-h h3 { font-size: 14px; font-weight: 700; }
+    .modal-b { padding: 18px 20px; }
+    .modal-close { background: none; border: none; font-size: 18px; color: #a8a29e; cursor: pointer; }
+    .member-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f5f5f4; }
+    .member-row:last-child { border-bottom: none; }
+    .member-email { font-size: 12px; flex: 1; }
+    .role-select { font-family: inherit; font-size: 10px; border: 1px solid #d6d3d1; border-radius: 5px; padding: 4px 6px; background: #fff; }
+
+    /* ── demo controls ── */
+    .demo { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 100; background: rgba(255,255,255,0.92); backdrop-filter: blur(6px); padding: 8px 12px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); border: 1px solid #e7e5e4; flex-wrap: wrap; justify-content: center; }
+    .demo span { font-size: 9px; color: #a8a29e; letter-spacing: 0.1em; text-transform: uppercase; align-self: center; }
+    .demo button { font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: #1c1917; color: #fff; border: none; padding: 7px 11px; border-radius: 6px; cursor: pointer; }
+    .demo button.sec { background: #fff; color: #44403c; border: 1px solid #d6d3d1; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<div class="backdrop" id="inviteBackdrop" onclick="if(event.target===this) closeInvite()">
+  <div class="modal">
+    <div class="modal-h">
+      <h3>Share “Demand Growth Streams”</h3>
+      <button class="modal-close" onclick="closeInvite()">&#x2715;</button>
+    </div>
+    <div class="modal-b">
+      <label class="label">Invite an editor by email</label>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <input class="input" placeholder="colleague@aviv-group.com" style="flex:1;" />
+        <button class="btn btn-violet">Invite</button>
+      </div>
+      <p style="font-size:10px; color:#a8a29e; line-height:1.6; margin-bottom:14px;">They'll get a magic-link email. Once signed in with that address they can edit this roadmap.</p>
+
+      <label class="label">People with access</label>
+      <div class="member-row"><div class="avatar" style="width:26px;height:26px;font-size:10px;">AJ</div><span class="member-email">you@aviv-group.com</span><span class="badge badge-owner">Owner</span></div>
+      <div class="member-row"><div class="avatar" style="width:26px;height:26px;font-size:10px;background:#0ea5e9;">MK</div><span class="member-email">maria.k@aviv-group.com</span>
+        <select class="role-select"><option>Editor</option><option>Viewer</option><option>Remove</option></select>
+      </div>
+      <div class="member-row"><div class="avatar" style="width:26px;height:26px;font-size:10px;background:#f59e0b;">TN</div><span class="member-email">tom.n@aviv-group.com</span>
+        <select class="role-select"><option>Viewer</option><option>Editor</option><option>Remove</option></select>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:14px; border-top:1px solid #f5f5f4;">
+        <div><div style="font-size:12px; font-weight:600;">🌐 Public link</div><div style="font-size:10px; color:#a8a29e; margin-top:2px;">Anyone with the link can view (read-only)</div></div>
+        <button class="btn btn-light" style="font-size:10px; padding:7px 12px;">Copy link</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="demo">
+  <span>Preview:</span>
+  <button onclick="render('login')">1 · Login</button>
+  <button class="sec" onclick="render('sent')">2 · Check email</button>
+  <button class="sec" onclick="render('code')">3 · Code entry</button>
+  <button class="sec" onclick="render('signingin')">4 · Returning</button>
+  <button class="sec" onclick="render('dash')">5 · Dashboard</button>
+  <button class="sec" onclick="openInvite()">6 · Share modal</button>
+</div>
+
+<script>
+  const EMAIL = "you@aviv-group.com";
+  const root = () => document.getElementById('root');
+
+  function render(state) {
+    if (state === 'login')     return renderLogin();
+    if (state === 'sent')      return renderSent();
+    if (state === 'code')      return renderCode();
+    if (state === 'signingin') return renderSigningIn();
+    if (state === 'dash')      return renderDash();
+  }
+
+  const shell = (inner) => `<div class="auth-wrap"><div class="auth-card">
+    <div class="wordmark">Roadmap<span class="dot">.</span></div>
+    <div class="auth-tagline">cadence-x</div>${inner}</div></div>`;
+
+  function renderLogin() {
+    root().innerHTML = shell(`
+      <div class="auth-h">Sign in</div>
+      <div class="auth-p">Sign in to create, edit and sync your roadmaps across devices — no password needed.</div>
+      <div class="auth-field">
+        <label class="label">Email</label>
+        <input class="input" id="email" type="email" value="${EMAIL}" placeholder="you@company.com" />
+      </div>
+      <button class="btn btn-dark full" onclick="render('sent')">✦ Send magic link</button>
+      <div class="divider">OR</div>
+      <button class="btn btn-light full" onclick="render('dash')">Continue without signing in</button>
+      <div class="auth-note">“Continue without signing in” keeps everything local to this browser — same as today, with manual Backup / share links.</div>
+    `);
+  }
+
+  function renderSent() {
+    root().innerHTML = shell(`
+      <div class="mail-icon">✉️</div>
+      <div class="auth-h">Check your email</div>
+      <div class="auth-p">We sent a sign-in link to<br><span class="email-strong">${EMAIL}</span>.<br>Click it to sign in — you can close this tab.</div>
+      <button class="btn btn-light full" onclick="render('code')">Enter a 6-digit code instead</button>
+      <div class="auth-note">
+        Didn't get it? <button class="link-btn" onclick="this.textContent='Sent again ✓'">Resend link</button><br>
+        <button class="link-btn muted" onclick="render('login')">← Use a different email</button>
+      </div>
+    `);
+  }
+
+  function renderCode() {
+    root().innerHTML = shell(`
+      <div class="mail-icon">🔢</div>
+      <div class="auth-h">Enter your code</div>
+      <div class="auth-p">Enter the 6-digit code we emailed to<br><span class="email-strong">${EMAIL}</span>.</div>
+      <div class="code-inputs">
+        ${[0,1,2,3,4,5].map(()=>'<input class="code-box" maxlength="1" />').join('')}
+      </div>
+      <button class="btn btn-dark full" onclick="render('signingin')">Verify &amp; sign in</button>
+      <div class="auth-note"><button class="link-btn muted" onclick="render('sent')">← Back</button></div>
+    `);
+    setTimeout(()=>{ const b=document.querySelectorAll('.code-box'); b.forEach((el,i)=>el.addEventListener('input',()=>{ if(el.value && b[i+1]) b[i+1].focus(); })); b[0]?.focus(); },0);
+  }
+
+  function renderSigningIn() {
+    root().innerHTML = shell(`
+      <div class="mail-icon" style="background:#ecfdf5;">✓</div>
+      <div class="auth-h">Signing you in…</div>
+      <div class="auth-p">Link verified. Setting up your workspace.</div>
+    `);
+    setTimeout(()=>{ if(document.querySelector('.auth-card')) render('dash'); }, 1400);
+  }
+
+  function card(title, role, vis, updated, collabs, live) {
+    const badge = role==='Owner'?'badge-owner':role==='Editor'?'badge-editor':'badge-viewer';
+    const collabHtml = collabs.map(c=>`<div class="collab" style="background:${c.c}">${c.i}</div>`).join('');
+    return `<div class="card" onclick="alert('→ opens this roadmap board')">
+      <div class="card-top">
+        <div class="card-title">${title}</div>
+        <span class="badge ${badge}">${role}</span>
+      </div>
+      <div class="card-meta">
+        <span class="meta-item">${vis==='public'?'🌐 Public':'🔒 Private'}</span>
+        <span class="meta-item">· ${updated}</span>
+        ${live?'<span class="meta-item"><span class="live-dot"></span> 2 viewing</span>':''}
+      </div>
+      <div class="card-actions">
+        <div class="collab-stack" style="flex:1; align-items:center;">${collabHtml}</div>
+        ${role!=='Viewer'?'<button class="mini-btn" onclick="event.stopPropagation(); openInvite()">Share</button>':''}
+        <button class="mini-btn" onclick="event.stopPropagation()">Open</button>
+      </div>
+    </div>`;
+  }
+
+  function renderDash() {
+    root().innerHTML = `
+      <div class="topbar">
+        <div class="wordmark">Roadmap<span class="dot">.</span></div>
+        <div class="user-chip">
+          <span class="user-email">${EMAIL}</span>
+          <div class="avatar">AJ</div>
+          <button class="btn btn-ghost" style="padding:6px 8px; font-size:10px;" onclick="render('login')">Log out</button>
+        </div>
+      </div>
+      <div class="dash">
+        <div class="dash-head">
+          <div class="dash-title">My roadmaps</div>
+        </div>
+        <div class="section-label">Owned by me</div>
+        <div class="grid">
+          <div class="card new-card" onclick="alert('→ creates a new roadmap')">
+            <div class="new-plus">+</div>
+            <div style="font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">New roadmap</div>
+          </div>
+          ${card('Demand Growth Streams','Owner','public','edited 2h ago',[{i:'MK',c:'#0ea5e9'},{i:'TN',c:'#f59e0b'}],true)}
+          ${card('Core Adjacent Revenue','Owner','private','edited yesterday',[{i:'MK',c:'#0ea5e9'}],false)}
+        </div>
+        <div class="section-label">Shared with me</div>
+        <div class="grid">
+          ${card('Platform Reliability 2026','Editor','private','edited 3d ago',[{i:'SL',c:'#8b5cf6'},{i:'AJ',c:'#6d28d9'}],false)}
+          ${card('Company OKRs — Exec view','Viewer','private','edited 1w ago',[{i:'CE',c:'#ef4444'}],false)}
+        </div>
+      </div>`;
+  }
+
+  function openInvite() { document.getElementById('inviteBackdrop').classList.add('open'); }
+  function closeInvite() { document.getElementById('inviteBackdrop').classList.remove('open'); }
+  document.addEventListener('keydown', e => { if (e.key==='Escape') closeInvite(); });
+
+  render('login');
+</script>
+</body>
+</html>

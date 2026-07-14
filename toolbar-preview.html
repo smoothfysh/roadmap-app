@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top toolbar options — Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Mono', monospace; background: #fafaf9; color: #1c1917; min-height: 100vh; padding: 30px 20px 120px; }
+
+    .intro { max-width: 1000px; margin: 0 auto 8px; font-size: 12px; color: #78716c; }
+    .opt-title { max-width: 1000px; margin: 26px auto 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #6d28d9; display: flex; align-items: center; gap: 8px; }
+    .opt-title .rec { font-size: 8px; background: #f5f3ff; border: 1px solid #ede9fe; color: #6d28d9; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.1em; }
+    .opt-note { max-width: 1000px; margin: 0 auto 10px; font-size: 11px; color: #a8a29e; }
+
+    .barwrap { max-width: 1000px; margin: 0 auto; background: #fff; border: 1px solid #e7e5e4; border-radius: 10px; padding: 12px 14px; }
+    .bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+      border: 1px solid #d6d3d1; background: #fff; color: #57534e;
+      padding: 5px 10px; border-radius: 6px; cursor: pointer; transition: all 0.1s; white-space: nowrap;
+    }
+    .btn:hover { border-color: #78716c; color: #1c1917; }
+    .btn .ic { font-size: 12px; opacity: 0.7; }
+
+    /* live status (always visible) */
+    .btn.cloud { border-color: #ddd6fe; background: #f5f3ff; color: #6d28d9; }
+    .btn.cloud:hover { border-color: #a78bfa; }
+    .btn.publish { border-color: #fcd34d; background: #fffbeb; color: #b45309; }
+    .btn.publish:hover { border-color: #f59e0b; }
+    .btn.published { border-color: #e7e5e4; background: #fff; color: #a8a29e; cursor: default; }
+    .status-cluster { display: inline-flex; align-items: center; gap: 6px; padding: 3px; border: 1px solid #ede9fe; background: #faf9ff; border-radius: 8px; }
+
+    .divider { width: 1px; height: 20px; background: #e7e5e4; margin: 0 3px; }
+    .group { display: inline-flex; align-items: center; gap: 4px; padding: 3px; background: #fafaf9; border: 1px solid #f0efed; border-radius: 8px; }
+    .group-label { font-size: 8px; color: #a8a29e; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 4px; }
+
+    .btn.danger { color: #b91c1c; border-color: transparent; background: none; }
+    .btn.danger:hover { background: #fef2f2; border-color: #fecaca; }
+    .spacer { flex: 1; }
+
+    /* dropdown */
+    .menu-wrap { position: relative; display: inline-block; }
+    .menu-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; background: #fff; border: 1px solid #e7e5e4; border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.14); padding: 6px; min-width: 220px; display: none; }
+    .menu-panel.open { display: block; }
+    .menu-sec { font-size: 8px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #a8a29e; padding: 8px 10px 4px; }
+    .menu-item { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font-family: inherit; font-size: 12px; color: #44403c; background: none; border: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+    .menu-item:hover { background: #f5f3ff; color: #1c1917; }
+    .menu-item .ic { width: 16px; text-align: center; opacity: 0.7; }
+    .menu-item.danger { color: #b91c1c; }
+    .menu-item.danger:hover { background: #fef2f2; }
+    .menu-sep { height: 1px; background: #f0efed; margin: 5px 4px; }
+
+    .board-hint { max-width: 1000px; margin: 14px auto 0; border: 1px dashed #d6d3d1; border-radius: 10px; min-height: 90px; display: flex; align-items: center; justify-content: center; color: #a8a29e; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: linear-gradient(90deg,#f0fdf4 0 25%,#eff6ff 25% 50%,#fffbeb 50% 75%,#f8fafc 75% 100%); opacity: 0.4; }
+
+    .demo { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 100; background: rgba(255,255,255,0.92); backdrop-filter: blur(6px); padding: 8px 12px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); border: 1px solid #e7e5e4; }
+    .demo span { font-size: 9px; color: #a8a29e; letter-spacing: 0.1em; text-transform: uppercase; align-self: center; }
+    .demo button { font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: #1c1917; color: #fff; border: none; padding: 7px 11px; border-radius: 6px; cursor: pointer; }
+    .demo button.sec { background: #fff; color: #44403c; border: 1px solid #d6d3d1; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="intro">Same buttons, three ways to arrange them. Live status (Cloud / Publish) always stays on the bar; low-frequency data tools group together or move into a menu. Dropdowns are clickable.</div>
+
+<!-- OPTION A -->
+<div id="optA">
+  <div class="opt-title">Option A — Grouped inline (everything visible)</div>
+  <div class="opt-note">Nothing hidden. Buttons reordered into labelled clusters with dividers. Simplest change; bar is still fairly full on narrow screens.</div>
+  <div class="barwrap">
+    <div class="bar">
+      <button class="btn"><span class="ic">⧉</span> Share</button>
+      <div class="divider"></div>
+      <div class="group"><span class="group-label">CSV</span>
+        <button class="btn"><span class="ic">↓</span> Export CSV</button>
+        <button class="btn"><span class="ic">↑</span> Import CSV</button>
+      </div>
+      <div class="group"><span class="group-label">JSON</span>
+        <button class="btn"><span class="ic">↓</span> Backup JSON</button>
+        <button class="btn"><span class="ic">↑</span> Restore JSON</button>
+      </div>
+      <button class="btn"><span class="ic">▦</span> Compact</button>
+      <div class="spacer"></div>
+      <div class="status-cluster">
+        <button class="btn cloud"><span class="ic">☁</span> Synced</button>
+        <button class="btn published">Published ✓</button>
+      </div>
+      <div class="divider"></div>
+      <button class="btn danger">Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- OPTION B -->
+<div id="optB" class="hidden">
+  <div class="opt-title">Option B — Live status + “Data ▾” menu <span class="rec">Recommended</span></div>
+  <div class="opt-note">Primary/live items stay out: Share, Cloud status, Publish. CSV + JSON + Reset move into a grouped dropdown. Clean bar, everything still one click away.</div>
+  <div class="barwrap">
+    <div class="bar">
+      <button class="btn"><span class="ic">⧉</span> Share</button>
+      <button class="btn"><span class="ic">▦</span> Compact</button>
+      <div class="spacer"></div>
+      <div class="status-cluster">
+        <button class="btn cloud"><span class="ic">☁</span> Synced</button>
+        <button class="btn publish"><span class="ic">●</span> Publish</button>
+      </div>
+      <div class="menu-wrap">
+        <button class="btn" onclick="toggleMenu('menuB')"><span class="ic">⋯</span> Data ▾</button>
+        <div class="menu-panel" id="menuB">
+          <div class="menu-sec">CSV</div>
+          <button class="menu-item"><span class="ic">↓</span> Export CSV</button>
+          <button class="menu-item"><span class="ic">↑</span> Import CSV</button>
+          <div class="menu-sep"></div>
+          <div class="menu-sec">JSON (full backup)</div>
+          <button class="menu-item"><span class="ic">↓</span> Backup JSON</button>
+          <button class="menu-item"><span class="ic">↑</span> Restore JSON</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item danger"><span class="ic">⟲</span> Reset roadmap</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OPTION C -->
+<div id="optC" class="hidden">
+  <div class="opt-title">Option C — Minimal bar, single “Actions ▾” menu</div>
+  <div class="opt-note">Only live status stays visible. Everything else (Share, CSV, JSON, Compact, Reset) lives in one menu. Cleanest bar, but Share + Compact cost one extra click.</div>
+  <div class="barwrap">
+    <div class="bar">
+      <div class="status-cluster">
+        <button class="btn cloud"><span class="ic">☁</span> Synced</button>
+        <button class="btn publish"><span class="ic">●</span> Publish</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="menu-wrap">
+        <button class="btn" onclick="toggleMenu('menuC')"><span class="ic">⋯</span> Actions ▾</button>
+        <div class="menu-panel" id="menuC">
+          <button class="menu-item"><span class="ic">⧉</span> Share as URL</button>
+          <button class="menu-item"><span class="ic">▦</span> Compact view</button>
+          <div class="menu-sep"></div>
+          <div class="menu-sec">CSV</div>
+          <button class="menu-item"><span class="ic">↓</span> Export CSV</button>
+          <button class="menu-item"><span class="ic">↑</span> Import CSV</button>
+          <div class="menu-sep"></div>
+          <div class="menu-sec">JSON (full backup)</div>
+          <button class="menu-item"><span class="ic">↓</span> Backup JSON</button>
+          <button class="menu-item"><span class="ic">↑</span> Restore JSON</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item danger"><span class="ic">⟲</span> Reset roadmap</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="board-hint">roadmap board</div>
+
+<div class="demo">
+  <span>Compare:</span>
+  <button onclick="show('A')">A · Grouped inline</button>
+  <button class="sec" onclick="show('B')">B · Data menu</button>
+  <button class="sec" onclick="show('C')">C · Minimal</button>
+</div>
+
+<script>
+  function show(o) {
+    for (const x of ['A','B','C']) document.getElementById('opt'+x).classList.toggle('hidden', x !== o);
+    closeMenus();
+  }
+  function toggleMenu(id) {
+    const el = document.getElementById(id);
+    const wasOpen = el.classList.contains('open');
+    closeMenus();
+    if (!wasOpen) el.classList.add('open');
+    event.stopPropagation();
+  }
+  function closeMenus() { document.querySelectorAll('.menu-panel').forEach(m => m.classList.remove('open')); }
+  document.addEventListener('click', closeMenus);
+  show('B');
+</script>
+</body>
+</html>

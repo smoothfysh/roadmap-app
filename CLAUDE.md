@@ -22,6 +22,16 @@ npm run build      # production build → dist/
 npm run deploy     # build + push to gh-pages branch
 ```
 
+## Workflow rules (must follow)
+
+The user has explicitly asked for these — always obey:
+
+- **Do NOT start the dev server.** Never run `npm run dev` or spin up a preview server after building. The user runs and checks the app themselves. Verifying with `npm run build` (compile check) is fine; launching a live server is not.
+
+- **Back up `src/App.jsx` on every version bump.** Whenever you make new changes that increase the `package.json` version, first copy the current file to `src/App.<current-version>.jsx` (the version being replaced) *before* editing — e.g. at 4.5.0, run `cp src/App.jsx src/App.4.5.0.jsx`, then make changes and bump to 4.6.0. This gives a one-file rollback point. These backup `.jsx` files are not imported, so they're excluded from the build.
+
+- **Update `CHANGELOG.md` on every version bump.** Add a new entry at the top (newest first) with the new version, the date, and a short bullet list of what changed, so there's a record of which changes are in which version.
+
 ## Architecture
 
 Everything is in `src/App.jsx`. Key sections (in file order):
@@ -80,3 +90,5 @@ If a change touches any of the above, call it out explicitly before making it.
 ## Version
 
 `APP_VERSION` (App.jsx, top of file) is derived from `package.json`'s `version` field — not hardcoded. Bump `package.json` when deploying significant changes; the footer picks it up automatically.
+
+Before bumping the version for new work, snapshot `src/App.jsx` → `src/App.<current-version>.jsx` (see **Workflow rules**).

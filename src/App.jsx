@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat, Rows3 } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle } from "lucide-react";
 import { version } from "../package.json";
+import { supabase, cloudEnabled } from "./supabaseClient";
+import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, stableStringify } from "./cloud";
 
 // Single app-wide version shown in every tab footer — sourced from package.json.
 // Bump the "version" field there on significant changes.
@@ -24,6 +26,18 @@ const SCOPE_NAME = (() => {
 const LOCATION_URL = (() => {
   try { return new URLSearchParams(window.location.search).get("location") || null; } catch { return null; }
 })();
+
+// Cloud edit link params: ?id=<roadmap id>&key=<secret edit key>
+const CLOUD_ID = (() => {
+  try { return new URLSearchParams(window.location.search).get("id") || null; } catch { return null; }
+})();
+const CLOUD_KEY = (() => {
+  try { return new URLSearchParams(window.location.search).get("key") || null; } catch { return null; }
+})();
+
+// Per-roadmap localStorage key for a cloud roadmap, so cloud editing has its own local
+// cache and never overwrites the default local roadmap (STORAGE_KEY = "roadmap-data").
+const cloudStorageKey = (id) => `roadmap-cloud-${id}`;
 
 // ---------- Seed data ----------
 const seedData = {
@@ -524,6 +538,114 @@ function getDevsSummary(detail) {
   return m ? m[1].replace(/->/g, "→").trim() : "";
 }
 
+// ---------- Quarter summary (markdown-lite) ----------
+// A single freeform summary for the roadmap, stored on data.summary and rendered
+// with a small Markdown subset: ## heading · ### subheading · **bold** · *italic* ·
+// `code` · "-"/"1." lists · "> " quote · [text](url). Authored manually (paste from
+// an LLM if you like) and edited in the summary modal. Shares the HTML-escape helper
+// with the team-detail renderer so both stay consistent.
+function inlineSummaryFmt(s) {
+  let t = escapeTeamHtml(s);
+  t = t.replace(/`([^`]+)`/g, '<code class="bg-stone-100 border border-stone-200 rounded px-1 text-[11px]">$1</code>');
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-violet-700 underline underline-offset-2 hover:text-violet-900">$1</a>');
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-stone-900">$1</strong>');
+  t = t.replace(/\*(.+?)\*/g, '<em class="italic">$1</em>');
+  return t;
+}
+function renderSummaryHtml(src) {
+  const lines = (src || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  let list = null;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    let m;
+    if (!line.trim()) { closeList(); continue; }
+    if ((m = line.match(/^##\s+(.*)/)))    { closeList(); out.push('<div class="text-[11px] font-bold uppercase tracking-wider text-violet-700 mt-4 first:mt-0 mb-1.5 pb-1 border-b border-violet-100">' + inlineSummaryFmt(m[1]) + "</div>"); continue; }
+    if ((m = line.match(/^###\s+(.*)/)))   { closeList(); out.push('<div class="text-[13px] font-bold text-stone-900 mt-3 mb-1">' + inlineSummaryFmt(m[1]) + "</div>"); continue; }
+    if ((m = line.match(/^>\s?(.*)/)))     { closeList(); out.push('<blockquote class="border-l-2 border-violet-200 pl-3 my-2 italic text-stone-600">' + inlineSummaryFmt(m[1]) + "</blockquote>"); continue; }
+    if ((m = line.match(/^\d+\.\s+(.*)/))) { if (list !== "ol") { closeList(); out.push('<ol class="list-decimal pl-5 my-1.5 space-y-1">'); list = "ol"; } out.push("<li>" + inlineSummaryFmt(m[1]) + "</li>"); continue; }
+    if ((m = line.match(/^[-*]\s+(.*)/)))  { if (list !== "ul") { closeList(); out.push('<ul class="list-disc pl-5 my-1.5 space-y-1">'); list = "ul"; } out.push("<li>" + inlineSummaryFmt(m[1]) + "</li>"); continue; }
+    closeList(); out.push('<p class="my-1.5">' + inlineSummaryFmt(line) + "</p>");
+  }
+  closeList();
+  return out.join("");
+}
+// Toolbar for the summary editor — each entry wraps/prefixes the current selection.
+const SUMMARY_TOOLBAR = [
+  { label: "H",   title: "Heading",       before: "## ",  after: "" },
+  { label: "H₃",  title: "Subheading",    before: "### ", after: "" },
+  { sep: true },
+  { label: "B",   title: "Bold",   before: "**", after: "**", bold: true },
+  { label: "I",   title: "Italic", before: "*",  after: "*",  italic: true },
+  { label: "</>", title: "Code",   before: "`",  after: "`" },
+  { sep: true },
+  { label: "•",   title: "Bullet list",   before: "- ",  after: "" },
+  { label: "1.",  title: "Numbered list", before: "1. ", after: "" },
+  { label: "❝",   title: "Quote",         before: "> ",  after: "" },
+  { label: "🔗",  title: "Link",          before: "[",   after: "](url)" },
+];
+// Current calendar quarter label, e.g. "Q3 2026" — shown on the summary modal.
+function currentQuarterLabel() {
+  const d = new Date();
+  return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+}
+
+// ---------- Summary → clipboard (formatting-preserving) ----------
+// The on-screen preview styles with Tailwind CLASSES, which paste targets (Slides,
+// Docs, Word) strip. For copy/paste we emit SEMANTIC tags + inline styles instead,
+// which those apps honour — so bold, headings, lists and quotes survive the paste.
+function inlineSummaryRich(s) {
+  let t = escapeTeamHtml(s);
+  t = t.replace(/`([^`]+)`/g, '<code style="font-family:Consolas,monospace;background:#f2f2f2;padding:0 3px;border-radius:3px;">$1</code>');
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  t = t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  return t;
+}
+function inlineSummaryPlain(s) {
+  return s
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1");
+}
+function summaryToRichHtml(src) {
+  const lines = (src || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  let list = null;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    let m;
+    if (!line.trim()) { closeList(); continue; }
+    if ((m = line.match(/^##\s+(.*)/)))    { closeList(); out.push(`<h2 style="font-size:15px;font-weight:bold;margin:16px 0 4px;">${inlineSummaryRich(m[1])}</h2>`); continue; }
+    if ((m = line.match(/^###\s+(.*)/)))   { closeList(); out.push(`<h3 style="font-size:13px;font-weight:bold;margin:12px 0 3px;">${inlineSummaryRich(m[1])}</h3>`); continue; }
+    if ((m = line.match(/^>\s?(.*)/)))     { closeList(); out.push(`<blockquote style="margin:8px 0;padding-left:12px;border-left:3px solid #c4b5fd;color:#555555;font-style:italic;">${inlineSummaryRich(m[1])}</blockquote>`); continue; }
+    if ((m = line.match(/^\d+\.\s+(.*)/))) { if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; } out.push(`<li>${inlineSummaryRich(m[1])}</li>`); continue; }
+    if ((m = line.match(/^[-*]\s+(.*)/)))  { if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; } out.push(`<li>${inlineSummaryRich(m[1])}</li>`); continue; }
+    closeList(); out.push(`<p style="margin:6px 0;">${inlineSummaryRich(line)}</p>`);
+  }
+  closeList();
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#1c1917;">${out.join("")}</div>`;
+}
+function summaryToPlainText(src) {
+  const lines = (src || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  let n = 0;
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    let m;
+    if (!line.trim()) { out.push(""); n = 0; continue; }
+    if ((m = line.match(/^#{2,3}\s+(.*)/)))  { out.push(inlineSummaryPlain(m[1]).toUpperCase()); n = 0; continue; }
+    if ((m = line.match(/^>\s?(.*)/)))       { out.push(`“${inlineSummaryPlain(m[1])}”`); n = 0; continue; }
+    if ((m = line.match(/^\d+\.\s+(.*)/)))   { out.push(`${++n}. ${inlineSummaryPlain(m[1])}`); continue; }
+    if ((m = line.match(/^[-*]\s+(.*)/)))    { out.push(`• ${inlineSummaryPlain(m[1])}`); n = 0; continue; }
+    out.push(inlineSummaryPlain(line)); n = 0;
+  }
+  return out.join("\n");
+}
+
 export default function RoadmapTracker() {
   const [data, setData] = useState(seedData);
   const [loading, setLoading] = useState(true);
@@ -562,6 +684,26 @@ export default function RoadmapTracker() {
   const [locationError, setLocationError] = useState(false);
   const fileInputRef = useRef(null);
   const backupInputRef = useRef(null);
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+  const [summaryEditing, setSummaryEditing] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [summaryCopied, setSummaryCopied] = useState(false);
+  const summaryTextareaRef = useRef(null);
+  // Cloud sync (Supabase, no-login). cloudRoadmap = { id, key } when editing a cloud copy.
+  const [cloudRoadmap, setCloudRoadmap] = useState(null);
+  const [cloudModalOpen, setCloudModalOpen] = useState(false);
+  const [cloudSaveState, setCloudSaveState] = useState("idle"); // idle | saving | saved | error
+  const [newEditLink, setNewEditLink] = useState(null);         // set after create → safety modal
+  const [editLinkSaved, setEditLinkSaved] = useState(false);    // safety-modal checkbox
+  const [cloudCopyMsg, setCloudCopyMsg] = useState("");         // transient "copied" confirmation
+  const [cloudTick, setCloudTick] = useState(0);                // bump to re-read the local list
+  const [cloudPublishedCanon, setCloudPublishedCanon] = useState(null); // canonical JSON of the published copy (null = never published)
+  const [cloudPublishing, setCloudPublishing] = useState(false);
+  const [cloudViewError, setCloudViewError] = useState(false);  // ?id= view: roadmap not published / not found
+  const [cloudViewId, setCloudViewId] = useState(null);         // id of a published roadmap being viewed (drives realtime)
+  const [cloudLive, setCloudLive] = useState(false);            // realtime channel subscribed
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false); // top-bar "Actions ▾" dropdown
+  const [undoStack, setUndoStack] = useState([]);                // in-session undo snapshots (lost on refresh)
   const ganttHeaderRef = useRef(null);
   const ganttBodyRef = useRef(null);
 
@@ -577,6 +719,63 @@ export default function RoadmapTracker() {
           // Remove hash from URL so refresh doesn't re-trigger the preview
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
+      }
+
+      // Cloud EDIT link (?id=&key=): load the private working copy from Supabase.
+      if (CLOUD_ID && CLOUD_KEY && cloudEnabled) {
+        try {
+          const loaded = await loadWorking(CLOUD_ID, CLOUD_KEY);
+          if (loaded?.columns && loaded?.teams && loaded?.items) {
+            if (!loaded.title) loaded.title = seedData.title;
+            setData(loaded);
+            setCloudRoadmap({ id: CLOUD_ID, key: CLOUD_KEY });
+            rememberRoadmap({ id: CLOUD_ID, key: CLOUD_KEY, title: loaded.title });
+            try { localStorage.setItem(cloudStorageKey(CLOUD_ID), JSON.stringify(loaded)); } catch { /* ignore */ }
+            try {
+              const pub = await loadPublished(CLOUD_ID);
+              setCloudPublishedCanon(pub ? stableStringify(pub) : null);
+            } catch { /* ignore — treat as never published */ }
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error("Cloud load failed:", e);
+          // Offline / fetch failed — fall back to this roadmap's local cache if we have one,
+          // staying in cloud mode so edits still target it (and re-sync when back online).
+          try {
+            const cached = JSON.parse(localStorage.getItem(cloudStorageKey(CLOUD_ID)));
+            if (cached?.columns && cached?.teams && cached?.items) {
+              if (!cached.title) cached.title = seedData.title;
+              setData(cached);
+              setCloudRoadmap({ id: CLOUD_ID, key: CLOUD_KEY });
+              rememberRoadmap({ id: CLOUD_ID, key: CLOUD_KEY, title: cached.title });
+              setLoading(false);
+              return;
+            }
+          } catch { /* no usable cache */ }
+          alert("Couldn't open this cloud roadmap — the edit link may be incorrect or the roadmap was removed. Loading your local roadmap instead.");
+        }
+        // on failure with no cache, fall through to the normal local load below
+      }
+
+      // Cloud VIEW link (?id= only, no key): read the public PUBLISHED copy, read-only.
+      if (CLOUD_ID && !CLOUD_KEY && cloudEnabled) {
+        try {
+          const pub = await loadPublished(CLOUD_ID);
+          if (pub?.columns && pub?.teams && pub?.items) {
+            if (!pub.title) pub.title = seedData.title;
+            setData(pub);
+            setSharedPreview(pub); // reuse read-only preview mode (isPreview)
+            setCloudViewId(CLOUD_ID); // enable realtime updates for this published roadmap
+          } else {
+            setCloudViewError(true);
+          }
+        } catch (e) {
+          console.error("Cloud published read failed:", e);
+          setCloudViewError(true);
+        }
+        setLoading(false);
+        return;
       }
 
       // If a ?location= URL is provided, fetch the JSON from that external URL.
@@ -739,13 +938,268 @@ export default function RoadmapTracker() {
     return () => window.removeEventListener("keydown", handler);
   }, [expandedItem]);
 
+  useEffect(() => {
+    if (!summaryModalOpen) return;
+    const handler = (e) => { if (e.key === "Escape") { setSummaryModalOpen(false); setSummaryEditing(false); } };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [summaryModalOpen]);
+
+  // Debounced auto-save of the working copy to Supabase whenever data changes in cloud mode.
+  useEffect(() => {
+    if (!cloudRoadmap) return;
+    setCloudSaveState("saving");
+    const t = setTimeout(async () => {
+      try {
+        await saveWorking(cloudRoadmap.id, cloudRoadmap.key, data);
+        setCloudSaveState("saved");
+      } catch (e) {
+        console.error("Cloud save failed:", e);
+        setCloudSaveState("error");
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [data, cloudRoadmap]);
+
+  useEffect(() => {
+    if (!cloudModalOpen && !newEditLink) return;
+    const handler = (e) => {
+      if (e.key !== "Escape") return;
+      if (newEditLink) { if (editLinkSaved) setNewEditLink(null); } // only closable once acknowledged
+      else setCloudModalOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [cloudModalOpen, newEditLink, editLinkSaved]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    const handler = (e) => { if (e.key === "Escape") setActionsMenuOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [actionsMenuOpen]);
+
+  // In-session undo via Ctrl/⌘+Z (ignored while typing in a field or in read-only view).
+  useEffect(() => {
+    const handler = (e) => {
+      if (!((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z")) return;
+      const tgt = e.target;
+      const tag = (tgt?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tgt?.isContentEditable) return;
+      if (sharedPreview || undoStack.length === 0) return; // sharedPreview is state (declared up top); isPreview derives from it later
+      e.preventDefault();
+      handleUndo();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [sharedPreview, undoStack]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime: when viewing a published roadmap (?id=), subscribe to its published row so the
+  // board updates live the moment the owner publishes — no refresh needed.
+  useEffect(() => {
+    if (!cloudViewId || !supabase) return;
+    setCloudLive(false);
+    const channel = supabase
+      .channel(`published:${cloudViewId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "roadmap_published", filter: `id=eq.${cloudViewId}` },
+        (payload) => {
+          const next = payload?.new?.data;
+          if (next?.columns && next?.teams && next?.items) {
+            if (!next.title) next.title = seedData.title;
+            setData(next);
+            setSharedPreview(next);
+          }
+        }
+      )
+      .subscribe((status) => setCloudLive(status === "SUBSCRIBED"));
+    return () => { supabase.removeChannel(channel); setCloudLive(false); };
+  }, [cloudViewId]);
+
   // Save to localStorage on change
-  const saveData = (newData) => {
+  const saveData = (newData, opts = {}) => {
+    // Record an in-session undo snapshot of the pre-change state (deep-cloned so later
+    // in-place mutations elsewhere can't corrupt the history). Skipped when applying an undo.
+    if (!opts.isUndo) {
+      setUndoStack((s) => {
+        let snap;
+        try { snap = JSON.parse(JSON.stringify(data)); } catch { snap = null; }
+        if (!snap) return s;
+        const next = [...s, snap];
+        return next.length > 50 ? next.slice(next.length - 50) : next;
+      });
+    }
     setData(newData);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+      // In cloud mode, cache under a per-roadmap key so we don't clobber the default local roadmap.
+      const key = cloudRoadmap ? cloudStorageKey(cloudRoadmap.id) : STORAGE_KEY;
+      localStorage.setItem(key, JSON.stringify(newData));
     } catch (e) {
       console.error("Save failed:", e);
+    }
+  };
+
+  // ---------- Quarter summary ----------
+  const openSummary = () => { setSummaryEditing(false); setSummaryModalOpen(true); };
+  const closeSummary = () => { setSummaryModalOpen(false); setSummaryEditing(false); };
+  const startSummaryEdit = () => { setSummaryDraft(displayData.summary || ""); setSummaryEditing(true); };
+  const saveSummary = () => { saveData({ ...data, summary: summaryDraft }); setSummaryEditing(false); };
+  // Insert/wrap markdown around the current textarea selection, then restore focus.
+  const applyMd = (before, after) => {
+    const ta = summaryTextareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const sel = summaryDraft.slice(start, end) || (after ? "text" : "");
+    const next = summaryDraft.slice(0, start) + before + sel + after + summaryDraft.slice(end);
+    setSummaryDraft(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = start + before.length;
+      ta.selectionEnd = start + before.length + sel.length;
+    });
+  };
+  // Copy the summary to the clipboard as rich HTML (+ plain-text fallback) so pasting
+  // into Slides / Docs / Word keeps the formatting. Falls back to a DOM selection copy
+  // on browsers without async ClipboardItem support.
+  const copySummary = async () => {
+    const src = displayData.summary || "";
+    const html = summaryToRichHtml(src);
+    const text = summaryToPlainText(src);
+    const flash = () => { setSummaryCopied(true); setTimeout(() => setSummaryCopied(false), 2000); };
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new window.ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+        flash();
+        return;
+      }
+    } catch { /* fall through to legacy path */ }
+    try {
+      const el = document.createElement("div");
+      el.setAttribute("contenteditable", "true");
+      el.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
+      el.innerHTML = html;
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand("copy");
+      selection.removeAllRanges();
+      document.body.removeChild(el);
+      flash();
+    } catch {
+      try { await navigator.clipboard.writeText(text); flash(); } catch { /* give up silently */ }
+    }
+  };
+
+  // ---------- Cloud sync (Supabase, no-login) ----------
+  const copyCloud = (text, msg) => {
+    try { navigator.clipboard?.writeText(text); } catch { /* ignore */ }
+    setCloudCopyMsg(msg);
+    setTimeout(() => setCloudCopyMsg(""), 1800);
+  };
+
+  // Save the CURRENT roadmap to the cloud as a new roadmap, then show the edit-link safety modal.
+  const handleCreateCloud = async () => {
+    try {
+      setCloudSaveState("saving");
+      const { id, key } = await createRoadmap(data);
+      setCloudRoadmap({ id, key });
+      try { localStorage.setItem(cloudStorageKey(id), JSON.stringify(data)); } catch { /* ignore */ }
+      window.history.replaceState(null, "", `?id=${id}&key=${key}`);
+      setEditLinkSaved(false);
+      setNewEditLink(editLink(id, key));
+      setCloudTick((t) => t + 1);
+      setCloudSaveState("saved");
+    } catch (e) {
+      console.error("Cloud create failed:", e);
+      setCloudSaveState("error");
+      alert("Couldn't create the cloud roadmap: " + (e?.message || e));
+    }
+  };
+
+  // Open a roadmap from the local "My roadmaps" list (loads its working copy).
+  const openCloudRoadmap = async (id, key) => {
+    try {
+      const loaded = await loadWorking(id, key);
+      if (loaded?.columns && loaded?.teams && loaded?.items) {
+        if (!loaded.title) loaded.title = seedData.title;
+        setData(loaded);
+        try { localStorage.setItem(cloudStorageKey(id), JSON.stringify(loaded)); } catch { /* ignore */ }
+        setCloudRoadmap({ id, key });
+        rememberRoadmap({ id, key, title: loaded.title });
+        window.history.replaceState(null, "", `?id=${id}&key=${key}`);
+        setCloudModalOpen(false);
+        setCloudTick((t) => t + 1);
+      } else {
+        alert("That roadmap's data looks invalid.");
+      }
+    } catch (e) {
+      console.error("Cloud open failed:", e);
+      alert("Couldn't open that roadmap: " + (e?.message || e));
+    }
+  };
+
+  const handleForgetCloud = (id) => {
+    if (!confirm("Remove this from the browser's list? The roadmap stays in the cloud — you'll need its edit link to reopen it.")) return;
+    forgetRoadmap(id);
+    setCloudTick((t) => t + 1);
+  };
+
+  // Publish the working copy → published copy (what viewers see).
+  const handlePublish = async () => {
+    if (!cloudRoadmap) return;
+    try {
+      setCloudPublishing(true);
+      await publishRoadmap(cloudRoadmap.id, cloudRoadmap.key);
+      setCloudPublishedCanon(stableStringify(data));
+      setCloudCopyMsg("Published — viewers now see the latest");
+      setTimeout(() => setCloudCopyMsg(""), 2400);
+    } catch (e) {
+      console.error("Publish failed:", e);
+      alert("Couldn't publish: " + (e?.message || e));
+    } finally {
+      setCloudPublishing(false);
+    }
+  };
+
+  // In-session undo: restore the previous snapshot (also syncs to the cloud working copy).
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, -1));
+    saveData(prev, { isUndo: true });
+  };
+
+  // Revert the working copy back to the last PUBLISHED version (recover after a bad edit/reset).
+  const handleRevertToPublished = async () => {
+    if (!cloudRoadmap) return;
+    if (cloudPublishedCanon === null) {
+      alert("Nothing published yet — there's no published version to revert to.");
+      return;
+    }
+    if (!confirm("Discard your current working changes and restore the last PUBLISHED version? This replaces what you're editing now (you can Ctrl+Z this).")) return;
+    try {
+      const pub = await loadPublished(cloudRoadmap.id);
+      if (pub?.columns && pub?.teams && pub?.items) {
+        if (!pub.title) pub.title = seedData.title;
+        saveData(pub); // records an undo snapshot; auto-save then re-syncs the working copy
+        setCloudPublishedCanon(stableStringify(pub));
+        setCloudCopyMsg("Reverted to published");
+        setTimeout(() => setCloudCopyMsg(""), 2200);
+      } else {
+        alert("Couldn't read the published version.");
+      }
+    } catch (e) {
+      console.error("Revert failed:", e);
+      alert("Revert failed: " + (e?.message || e));
     }
   };
 
@@ -1005,13 +1459,18 @@ export default function RoadmapTracker() {
   };
 
   const resetToSeed = () => {
-    if (!confirm("Reset to a blank roadmap? All current items will be removed and team names reset to generic ones.")) return;
+    const msg = cloudRoadmap
+      ? "Reset to a blank roadmap?\n\nThis clears your working copy and auto-saves the blank version to the cloud. Your PUBLISHED version stays live for viewers — use “Revert to published” (or Ctrl+Z) to get it back.\n\nAll current items will be removed and team names reset."
+      : "Reset to a blank roadmap? All current items will be removed and team names reset to generic ones.";
+    if (!confirm(msg)) return;
     saveData(seedData);
   };
 
   // ---------- Derived display state ----------
   const displayData = sharedPreview ?? data;
   const isPreview = !!sharedPreview;
+  // In cloud edit mode: are there working-copy changes not yet published? (null canon = never published)
+  const cloudUnpublished = !!cloudRoadmap && stableStringify(data) !== cloudPublishedCanon;
 
   // ---- "BY TIME" render helpers (shared by compact + aligned layouts) ----
   const renderColumnHeader = (col, styles) => (
@@ -1340,6 +1799,25 @@ export default function RoadmapTracker() {
     );
   }
 
+  if (cloudViewError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50">
+        <div className="text-center space-y-3 max-w-md px-4">
+          <div className="text-stone-800 font-mono font-bold text-sm tracking-wider uppercase">Roadmap not published</div>
+          <p className="text-stone-600 text-sm">
+            This roadmap hasn't been published yet, or the link is incorrect. Ask the owner to publish it, then reopen this link.
+          </p>
+          <a
+            href={window.location.pathname}
+            className="inline-block mt-2 text-xs text-indigo-600 hover:text-indigo-900 underline underline-offset-2 font-mono"
+          >
+            ← Go to my roadmap
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   if (scopeError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
@@ -1435,29 +1913,8 @@ export default function RoadmapTracker() {
                 {displayData.title || seedData.title}
               </div>
             )}
-            <div className="flex items-center gap-3">
-              {/* Share button */}
-              <button
-                onClick={handleShare}
-                disabled={shareLoading}
-                className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors disabled:opacity-60 disabled:cursor-wait ${
-                  shareCopied
-                    ? "border-emerald-400 bg-emerald-50 text-emerald-700"
-                    : "border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100"
-                }`}
-                title="Copy a share link to your clipboard — recipients open the link and see a read-only preview with the option to save their own copy"
-              >
-                <Share2 className="w-3 h-3" />
-                {shareLoading ? "Generating…" : shareCopied ? "Link copied!" : "Share as URL Encoded"}
-              </button>
-              <button
-                onClick={() => exportCsv(displayData.items)}
-                className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-700 hover:text-stone-900 uppercase border border-stone-300 bg-white hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
-                title="Download your current roadmap as a CSV file"
-              >
-                <Download className="w-3 h-3" />
-                Export CSV
-              </button>
+            <div className="flex items-center gap-2">
+              {/* Compact view toggle (roadmap view only) — kept beside the live cloud status */}
               {activeView === "roadmap" && (
                 <button
                   onClick={() => setCompactView((v) => {
@@ -1479,46 +1936,138 @@ export default function RoadmapTracker() {
                   Compact View
                 </button>
               )}
-              {!isPreview && (
-                <>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-700 hover:text-stone-900 uppercase border border-stone-300 bg-white hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
-                    title="Load a CSV file to replace the current roadmap"
-                  >
-                    <Upload className="w-3 h-3" />
-                    Import CSV
-                  </button>
-                  <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImport} className="hidden" />
-                  <button
-                    onClick={exportBackup}
-                    className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-700 hover:text-stone-900 uppercase border border-stone-300 bg-white hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
-                    title="Save a full backup (includes teams, columns, items) as JSON"
-                  >
-                    <Download className="w-3 h-3" />
-                    Backup
-                  </button>
-                  <button
-                    onClick={() => backupInputRef.current?.click()}
-                    className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-700 hover:text-stone-900 uppercase border border-stone-300 bg-white hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
-                    title="Restore a full backup"
-                  >
-                    <Upload className="w-3 h-3" />
-                    Restore
-                  </button>
-                  <input ref={backupInputRef} type="file" accept=".json,application/json" onChange={handleBackupImport} className="hidden" />
-                  <button
-                    onClick={resetToSeed}
-                    className="text-xs font-mono tracking-wider text-stone-500 hover:text-stone-800 uppercase"
-                    title="Clear all items and reset to a blank roadmap"
-                  >
-                    Reset
-                  </button>
-                </>
+
+              {/* Live cloud status — always visible (never tucked into the menu) */}
+              {cloudEnabled && !isPreview && (
+                <button
+                  onClick={() => setCloudModalOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 hover:text-violet-900 hover:border-violet-400 px-2.5 py-1 rounded transition-colors"
+                  title="Save to the cloud (auto-save) and manage your roadmaps"
+                >
+                  <Cloud className="w-3 h-3" />
+                  {cloudRoadmap
+                    ? (cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Save failed" : "Synced")
+                    : "Cloud"}
+                </button>
               )}
+              {cloudEnabled && !isPreview && cloudRoadmap && (
+                <button
+                  onClick={handlePublish}
+                  disabled={cloudPublishing || !cloudUnpublished}
+                  className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors ${
+                    cloudUnpublished
+                      ? "border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800"
+                      : "border-stone-200 bg-white text-stone-400 cursor-default"
+                  }`}
+                  title={cloudUnpublished ? "Publish your changes so viewers see the latest" : "All changes published — viewers see the latest"}
+                >
+                  {cloudPublishing ? "Publishing…" : cloudUnpublished ? "● Publish" : "Published ✓"}
+                </button>
+              )}
+
+              {/* Actions menu — everything else (Share, CSV, JSON, Reset) */}
+              <div className="relative">
+                <button
+                  onClick={() => setActionsMenuOpen((o) => !o)}
+                  aria-haspopup="true"
+                  aria-expanded={actionsMenuOpen}
+                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
+                  title="Share, import/export, backup and more"
+                >
+                  Actions <span className="text-[9px] leading-none">▾</span>
+                </button>
+                {actionsMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setActionsMenuOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1.5 z-50 bg-white border border-stone-200 rounded-lg shadow-xl py-1.5 min-w-[220px]">
+                      {!isPreview && (
+                        <>
+                          <button
+                            onClick={handleUndo}
+                            disabled={undoStack.length === 0}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            ↩ Undo last change <span className="ml-auto text-[9px] text-stone-400">Ctrl+Z</span>
+                          </button>
+                          <div className="h-px bg-stone-100 my-1 mx-2" />
+                        </>
+                      )}
+                      {/* Share stays open after click so the "Link copied!" confirmation is visible */}
+                      <button
+                        onClick={handleShare}
+                        disabled={shareLoading}
+                        className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors disabled:opacity-60"
+                      >
+                        <Share2 className="w-3.5 h-3.5 opacity-70" />
+                        {shareLoading ? "Generating…" : shareCopied ? "Link copied!" : "Share as URL"}
+                      </button>
+
+                      <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-stone-400 px-3 pt-2 pb-1">CSV</div>
+                      <button
+                        onClick={() => { setActionsMenuOpen(false); exportCsv(displayData.items); }}
+                        className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5 opacity-70" /> Export CSV
+                      </button>
+                      {!isPreview && (
+                        <button
+                          onClick={() => { setActionsMenuOpen(false); fileInputRef.current?.click(); }}
+                          className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                        >
+                          <Upload className="w-3.5 h-3.5 opacity-70" /> Import CSV
+                        </button>
+                      )}
+
+                      {!isPreview && (
+                        <>
+                          <div className="h-px bg-stone-100 my-1 mx-2" />
+                          <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-stone-400 px-3 pt-1 pb-1">JSON · full backup</div>
+                          <button
+                            onClick={() => { setActionsMenuOpen(false); exportBackup(); }}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                          >
+                            <Download className="w-3.5 h-3.5 opacity-70" /> Backup JSON
+                          </button>
+                          <button
+                            onClick={() => { setActionsMenuOpen(false); backupInputRef.current?.click(); }}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                          >
+                            <Upload className="w-3.5 h-3.5 opacity-70" /> Restore JSON
+                          </button>
+
+                          <div className="h-px bg-stone-100 my-1 mx-2" />
+                          <button
+                            onClick={() => { setActionsMenuOpen(false); resetToSeed(); }}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-red-700 hover:bg-red-50 px-3 py-2 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 opacity-70" /> Reset roadmap
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Hidden file inputs (triggered from the Actions menu) */}
+              {!isPreview && <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImport} className="hidden" />}
+              {!isPreview && <input ref={backupInputRef} type="file" accept=".json,application/json" onChange={handleBackupImport} className="hidden" />}
+
+              {/* Help — opens the data/storage FAQ in a new tab */}
+              <a
+                href="/help.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
+                title="How this app stores your data (opens in a new tab)"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                Help
+              </a>
             </div>
           </div>
-          <div className="relative flex items-center justify-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+            <div className="flex items-center gap-3 min-w-0">
             {editingHeading && !isPreview ? (
               <input
                 type="text"
@@ -1548,7 +2097,8 @@ export default function RoadmapTracker() {
               <span className="w-3.5 h-3.5 rounded-full bg-amber-400" title="At risk"></span>
               <span className="w-3.5 h-3.5 rounded-full bg-rose-500" title="Blocked"></span>
             </div>
-            <div className="hidden sm:block absolute right-0 text-xs text-stone-500 font-mono">
+            </div>
+            <div className="text-xs text-stone-500 font-mono text-center">
               {isPreview ? "Read-only preview — save a copy to make edits" : "Drag items to reorder"}
             </div>
           </div>
@@ -1592,16 +2142,26 @@ export default function RoadmapTracker() {
           })}
         </div>
 
-        {/* Add Team button */}
-        {!isPreview && (
-          <div className="max-w-[1800px] mx-auto mt-4 flex justify-center">
+        {/* Add Team + Quarter Summary buttons */}
+        {(!isPreview || (displayData.summary || "").trim()) && (
+          <div className="max-w-[1800px] mx-auto mt-4 flex justify-center gap-2.5 flex-wrap">
+            {!isPreview && (
+              <button
+                onClick={addTeam}
+                className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-600 hover:text-stone-900 uppercase border border-dashed border-stone-400 hover:border-stone-700 hover:bg-white px-4 py-2 rounded transition-colors"
+                title="Add a new team row (will appear in every column)"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Team Row
+              </button>
+            )}
             <button
-              onClick={addTeam}
-              className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-600 hover:text-stone-900 uppercase border border-dashed border-stone-400 hover:border-stone-700 hover:bg-white px-4 py-2 rounded transition-colors"
-              title="Add a new team row (will appear in every column)"
+              onClick={openSummary}
+              className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 hover:text-violet-900 hover:border-violet-400 px-4 py-2 rounded transition-colors"
+              title="Quarter summary — what was achieved and what's next"
             >
-              <Plus className="w-3.5 h-3.5" />
-              Add Team Row
+              <FileText className="w-3.5 h-3.5" />
+              Quarter Summary
             </button>
           </div>
         )}
@@ -2076,6 +2636,309 @@ export default function RoadmapTracker() {
           );
         })()}
       </div>
+
+      {/* Live indicator for public viewers (realtime) */}
+      {cloudViewId && (
+        <div className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 bg-stone-900 text-white text-[10px] font-mono font-semibold uppercase tracking-wider px-3 py-2 rounded-full shadow-lg">
+          <span
+            className={`w-2 h-2 rounded-full ${cloudLive ? "bg-emerald-400" : "bg-amber-400"}`}
+            style={cloudLive ? { boxShadow: "0 0 0 3px rgba(16,185,129,0.25)" } : undefined}
+          />
+          {cloudLive ? "Live — updates automatically" : "Connecting…"}
+        </div>
+      )}
+
+      {/* Cloud roadmaps modal */}
+      {cloudModalOpen && (() => {
+        void cloudTick; // referenced so the list re-reads localStorage after changes
+        const list = listLocalRoadmaps();
+        const connected = !!cloudRoadmap;
+        return (
+          <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-6 z-50" onClick={() => setCloudModalOpen(false)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[88vh]" onClick={(e) => e.stopPropagation()}>
+              {/* header */}
+              <div className="px-5 py-4 border-b border-stone-100 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded mb-2">
+                    ☁ Cloud · no account needed
+                  </span>
+                  <div className="text-base font-bold text-stone-900 leading-snug">Cloud roadmaps</div>
+                  <div className="text-[11px] text-stone-500 mt-1">Auto-saves to the cloud as you edit. Your edit link is the only way back in.</div>
+                </div>
+                <button onClick={() => setCloudModalOpen(false)} className="flex-shrink-0 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded p-1 transition-colors" title="Close">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* body */}
+              <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+                {connected ? (
+                  <div className="border border-stone-200 rounded-lg p-3 space-y-3">
+                    <div>
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-stone-500 mb-0.5">
+                        This roadmap · {cloudSaveState === "saving" ? "saving…" : cloudSaveState === "error" ? "save failed" : "auto-saved ✓"}
+                      </div>
+                      <div className="text-sm font-bold text-stone-900 truncate">{data.title || "Untitled roadmap"}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {cloudUnpublished ? (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Unpublished changes</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Published</span>
+                      )}
+                      <button
+                        onClick={handlePublish}
+                        disabled={cloudPublishing || !cloudUnpublished}
+                        className="text-[10px] font-semibold uppercase tracking-wider bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded px-3 py-1.5 transition-colors"
+                      >
+                        {cloudPublishing ? "Publishing…" : "Publish"}
+                      </button>
+                      {cloudPublishedCanon !== null && (
+                        <button
+                          onClick={handleRevertToPublished}
+                          disabled={!cloudUnpublished}
+                          className="text-[10px] font-semibold uppercase tracking-wider text-stone-600 border border-stone-300 hover:border-stone-500 disabled:opacity-40 disabled:cursor-not-allowed rounded px-3 py-1.5 transition-colors"
+                          title="Discard working changes and restore the last published version"
+                        >
+                          ↩ Revert to published
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap pt-0.5">
+                      <button
+                        onClick={() => copyCloud(viewLink(cloudRoadmap.id), "View link copied")}
+                        disabled={cloudPublishedCanon === null}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-stone-700 border border-stone-300 hover:border-stone-500 disabled:opacity-40 disabled:cursor-not-allowed rounded px-2.5 py-1.5 transition-colors"
+                        title={cloudPublishedCanon === null ? "Publish first, then share the view link" : "Safe to send — viewers see the published version"}
+                      >
+                        🌐 Copy view link
+                      </button>
+                      <button
+                        onClick={() => copyCloud(editLink(cloudRoadmap.id, cloudRoadmap.key), "Edit link copied")}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-amber-700 border border-amber-300 bg-amber-50 hover:bg-amber-100 rounded px-2.5 py-1.5 transition-colors"
+                        title="Keep private — your only way back in"
+                      >
+                        🔑 Copy edit link
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border border-violet-200 bg-violet-50 rounded-lg p-3">
+                    <div className="text-sm font-semibold text-stone-900 mb-1">Save this roadmap to the cloud</div>
+                    <div className="text-[11px] text-stone-600 mb-2.5 leading-relaxed">Creates a private cloud copy that auto-saves as you edit, and gives you a secret edit link to reopen it anywhere.</div>
+                    <button
+                      onClick={handleCreateCloud}
+                      disabled={cloudSaveState === "saving"}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition-colors"
+                    >
+                      <Cloud className="w-3.5 h-3.5" /> {cloudSaveState === "saving" ? "Saving…" : "Save to cloud"}
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-[11px] text-amber-800 leading-relaxed">
+                  <span>🔑</span>
+                  <span><strong>No accounts here.</strong> Your edit links are the only way to edit these later, and this list lives only in this browser — keep your edit links saved somewhere safe.</span>
+                </div>
+
+                <div>
+                  <div className="text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-stone-400 mb-2">My roadmaps · this browser</div>
+                  {list.length === 0 ? (
+                    <div className="text-[12px] text-stone-400 italic py-1">None yet — use “Save to cloud” above.</div>
+                  ) : (
+                    list.map((r) => (
+                      <div key={r.id} className="flex items-center gap-2 py-2 border-b border-stone-100 last:border-b-0">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-semibold text-stone-800 truncate">{r.title || "Untitled roadmap"}</div>
+                          <div className="text-[10px] text-stone-400 truncate font-mono">{r.id}{cloudRoadmap?.id === r.id ? " · open" : ""}</div>
+                        </div>
+                        <button onClick={() => openCloudRoadmap(r.id, r.key)} className="text-[9px] font-mono font-semibold uppercase tracking-wider text-stone-600 border border-stone-300 hover:border-violet-400 hover:text-violet-700 rounded px-2 py-1 transition-colors">Open</button>
+                        <button onClick={() => copyCloud(editLink(r.id, r.key), "Edit link copied")} title="Copy edit link (keep private)" className="text-[11px] text-amber-700 border border-amber-300 hover:bg-amber-50 rounded px-2 py-1 transition-colors">🔑</button>
+                        <button onClick={() => handleForgetCloud(r.id)} title="Remove from this list" className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded p-1 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {cloudCopyMsg && <div className="text-[11px] text-emerald-600 font-semibold">{cloudCopyMsg} ✓</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit-link safety modal (after creating a cloud roadmap) */}
+      {newEditLink && (
+        <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center p-6 z-[60]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-stone-100">
+              <div className="text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-violet-700 mb-1">✓ Roadmap created</div>
+              <div className="text-base font-bold text-stone-900">Save your edit link</div>
+            </div>
+            <div className="px-5 py-4">
+              <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-[11px] text-amber-800 leading-relaxed mb-3">
+                <span>🔑</span>
+                <span><strong>This link is the only way to edit this roadmap later.</strong> There are no accounts — save it now (bookmark or password manager). We can’t recover it for you.</span>
+              </div>
+              <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Your private edit link</label>
+              <div className="flex gap-2 mb-1">
+                <input readOnly value={newEditLink} onFocus={(e) => e.target.select()} className="flex-1 text-[11px] font-mono text-stone-600 border border-stone-300 rounded px-2 py-1.5 bg-stone-50 outline-none" />
+                <button onClick={() => copyCloud(newEditLink, "Edit link copied")} className="text-[10px] font-semibold uppercase tracking-wider bg-violet-600 hover:bg-violet-700 text-white rounded px-3 py-1.5 transition-colors">Copy</button>
+              </div>
+              {cloudCopyMsg && <div className="text-[10px] text-emerald-600 font-semibold mb-1">{cloudCopyMsg} ✓</div>}
+              <label className="flex items-start gap-2 text-[12px] text-stone-600 leading-snug cursor-pointer mt-3">
+                <input type="checkbox" checked={editLinkSaved} onChange={(e) => setEditLinkSaved(e.target.checked)} className="mt-0.5" />
+                I’ve saved my edit link somewhere safe
+              </label>
+            </div>
+            <div className="px-5 py-3 border-t border-stone-100 flex justify-end">
+              <button onClick={() => setNewEditLink(null)} disabled={!editLinkSaved} className="text-[13px] font-semibold bg-stone-900 hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors">Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quarter summary modal */}
+      {summaryModalOpen && (() => {
+        const summaryText = displayData.summary || "";
+        const hasSummary = summaryText.trim().length > 0;
+        return (
+          <div
+            className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-6 z-50"
+            onClick={closeSummary}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isPreview && (
+                <div className="text-center text-[9px] font-mono font-semibold uppercase tracking-[0.25em] text-stone-400 bg-stone-50 border-b border-stone-100 py-1.5">
+                  Read Only
+                </div>
+              )}
+
+              {/* Modal header */}
+              <div className="px-5 py-4 border-b border-stone-100 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded mb-2">
+                    ✦ Summary · {currentQuarterLabel()}
+                  </span>
+                  <div className="text-base font-bold text-stone-900 leading-snug">What we achieved &amp; what's next</div>
+                  <div className="text-[11px] text-stone-500 mt-1">
+                    {summaryEditing ? "Write in Markdown — the preview updates live. Paste in from anywhere." : "A short summary for the current quarter."}
+                  </div>
+                </div>
+                {hasSummary && !summaryEditing && (
+                  <button
+                    onClick={copySummary}
+                    className={`flex-shrink-0 inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-1.5 rounded border transition-colors ${summaryCopied ? "border-violet-400 bg-violet-50 text-violet-700" : "border-stone-300 text-stone-500 hover:border-violet-400 hover:text-violet-700"}`}
+                    title="Copy formatted — paste into Slides, Docs or Word with formatting kept"
+                  >
+                    {summaryCopied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                  </button>
+                )}
+                <button
+                  onClick={closeSummary}
+                  className="flex-shrink-0 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded p-1 transition-colors"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal body */}
+              <div className="px-5 py-4 overflow-y-auto flex-1">
+                {summaryEditing && !isPreview ? (
+                  <>
+                    <div className="flex flex-wrap gap-1 border border-stone-300 border-b-0 rounded-t-lg p-1.5 bg-stone-50">
+                      {SUMMARY_TOOLBAR.map((t, idx) => t.sep ? (
+                        <div key={idx} className="w-px bg-stone-200 my-1 mx-0.5" />
+                      ) : (
+                        <button
+                          key={idx}
+                          type="button"
+                          title={t.title}
+                          onClick={() => applyMd(t.before, t.after)}
+                          className="min-w-[28px] h-[26px] px-2 inline-flex items-center justify-center text-[11px] font-semibold text-stone-600 hover:text-stone-900 hover:bg-white border border-transparent hover:border-stone-300 rounded transition-colors"
+                        >
+                          <span className={t.bold ? "font-bold" : t.italic ? "italic" : ""}>{t.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid md:grid-cols-2 border border-stone-300 border-t-0 rounded-b-lg overflow-hidden">
+                      <textarea
+                        ref={summaryTextareaRef}
+                        value={summaryDraft}
+                        onChange={(e) => setSummaryDraft(e.target.value)}
+                        autoFocus
+                        spellCheck={false}
+                        placeholder={"Paste or write the quarter summary…\n\n## What we achieved\n- …\n\n## What we want to achieve next\n1. …"}
+                        className="min-h-[340px] font-mono text-[12px] leading-relaxed text-stone-800 bg-white p-3 outline-none resize-y border-0 border-b md:border-b-0 md:border-r border-stone-200"
+                      />
+                      <div className="min-h-[340px] overflow-y-auto bg-stone-50 p-3">
+                        <div className="text-[8px] font-mono font-bold uppercase tracking-[0.14em] text-stone-400 mb-2">Live preview</div>
+                        <div className="text-[12.5px] leading-relaxed text-stone-800" dangerouslySetInnerHTML={{ __html: renderSummaryHtml(summaryDraft) }} />
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px] leading-relaxed text-stone-500 bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
+                      <span className="font-semibold text-stone-600">Markdown:</span>{" "}
+                      <code className="bg-stone-200 px-1 rounded">## Heading</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">**bold**</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">*italic*</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">- list</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">1. list</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">&gt; quote</code> ·{" "}
+                      <code className="bg-stone-200 px-1 rounded">[text](url)</code>
+                    </div>
+                  </>
+                ) : hasSummary ? (
+                  <div className="text-[12.5px] leading-relaxed text-stone-800" dangerouslySetInnerHTML={{ __html: renderSummaryHtml(summaryText) }} />
+                ) : (
+                  <div className="text-center text-stone-400 text-[13px] py-10 leading-relaxed">
+                    {isPreview ? (
+                      "No summary for this quarter."
+                    ) : (
+                      <>No summary yet for this quarter.<br />Click <span className="font-semibold text-stone-600">Write summary</span> to add one.</>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal footer */}
+              {!isPreview && (
+                <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between gap-3">
+                  {summaryEditing ? (
+                    <>
+                      <button
+                        onClick={() => setSummaryEditing(false)}
+                        className="text-[12.5px] text-stone-500 hover:text-stone-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveSummary}
+                        className="text-[13px] font-semibold bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Save summary
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[11px] text-stone-400">Saved locally · published with your Backup</span>
+                      <button
+                        onClick={startSummaryEdit}
+                        className="text-[13px] font-semibold text-stone-700 border border-stone-300 hover:bg-stone-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        ✎ {hasSummary ? "Edit" : "Write summary"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Team detail modal */}
       {teamModalId && (() => {
