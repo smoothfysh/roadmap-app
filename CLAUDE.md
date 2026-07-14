@@ -32,6 +32,8 @@ The user has explicitly asked for these — always obey:
 
 - **Update `CHANGELOG.md` on every version bump.** Add a new entry at the top (newest first) with the new version, the date, and a short bullet list of what changed, so there's a record of which changes are in which version.
 
+- **Commit (and push) before deploying.** `npm run deploy` ships whatever is on disk to the live site, regardless of git state — so always `git commit` the change and `git push origin main` *before* running deploy, so git history always reflects what's actually live. Never let deployed work sit uncommitted. (Check first that no secret is staged: `.env.local` is gitignored and must stay that way; the Supabase anon key must only ever reach the live site via the build, never git.)
+
 ## Architecture
 
 Everything is in `src/App.jsx`. Key sections (in file order):
