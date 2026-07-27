@@ -121,29 +121,51 @@
     text-transform: uppercase;
     color: var(--stone-600);
     font-weight: 700;
-    margin: 40px 0 4px;
+    margin: 36px 0 4px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--stone-200);
   }
-  .faq {
+
+  /* Accordion (native <details>/<summary>) */
+  details.faq {
     border: 1px solid var(--stone-200);
     background: #fff;
     border-radius: 10px;
-    padding: 18px 20px;
-    margin-top: 14px;
+    margin-top: 10px;
+    overflow: hidden;
   }
-  .faq + .faq { margin-top: 12px; }
-  .faq h3 {
-    font-size: 15px;
+  details.faq + details.faq { margin-top: 10px; }
+  details.faq summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    font-size: 14.5px;
     font-weight: 700;
     color: var(--stone-900);
-    margin: 0 0 8px;
   }
-  .faq p { margin: 0 0 10px; font-size: 14px; color: var(--stone-700); }
-  .faq p:last-child { margin-bottom: 0; }
-  .faq ul { margin: 0 0 10px; padding-left: 20px; font-size: 14px; color: var(--stone-700); }
-  .faq ul:last-child { margin-bottom: 0; }
-  .faq li { margin-bottom: 4px; }
+  details.faq summary::-webkit-details-marker { display: none; }
+  details.faq summary:hover { background: var(--stone-50); }
+  details.faq summary .q { display: flex; align-items: center; flex-wrap: wrap; }
+  details.faq summary .chev {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    color: var(--stone-400);
+    transition: transform 0.15s ease;
+  }
+  details.faq[open] summary .chev { transform: rotate(180deg); }
+  details.faq[open] summary { border-bottom: 1px solid var(--stone-100); }
+  details.faq .faq-body { padding: 4px 18px 18px; }
+  details.faq .faq-body p { margin: 0 0 10px; font-size: 14px; color: var(--stone-700); }
+  details.faq .faq-body p:last-child { margin-bottom: 0; }
+  details.faq .faq-body ul { margin: 0 0 10px; padding-left: 20px; font-size: 14px; color: var(--stone-700); }
+  details.faq .faq-body ul:last-child { margin-bottom: 0; }
+  details.faq .faq-body li { margin-bottom: 4px; }
+
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 12.5px;
@@ -214,7 +236,7 @@
 
     <div class="eyebrow">FAQ</div>
     <h1>Where does my data go?</h1>
-    <p class="sub">A plain-language explanation of how this app stores your roadmap — written so you can decide what's safe to type in.</p>
+    <p class="sub">A plain-language explanation of how this app stores your roadmap — tap a question to expand it.</p>
 
     <div class="callout">
       <div class="label">Short answer</div>
@@ -223,74 +245,90 @@
 
     <h2>The basics</h2>
 
-    <div class="faq">
-      <h3>Where is my roadmap actually stored? <span class="tag local">Default</span></h3>
-      <p>In your browser's <strong>local storage</strong> — a small private storage area that every website gets, tied to this exact browser on this exact device.</p>
-      <ul>
-        <li>Your default roadmap is saved under the key <code>roadmap-data</code>.</li>
-        <li>If you're viewing a named copy (a URL with <code>?scope=name</code>), it's saved separately under <code>roadmap-data-name</code> so it never overwrites your main board.</li>
-        <li>It's saved automatically every time you make a change — there's no "save" button to remember to click.</li>
-      </ul>
-    </div>
+    <details class="faq" name="basics">
+      <summary><span class="q">Where is my roadmap actually stored? <span class="tag local">Default</span></span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>In your browser's <strong>local storage</strong> — a small private storage area that every website gets, tied to this exact browser on this exact device.</p>
+        <ul>
+          <li>Your default roadmap is saved under the key <code>roadmap-data</code>.</li>
+          <li>If you're viewing a named copy (a URL with <code>?scope=name</code>), it's saved separately under <code>roadmap-data-name</code> so it never overwrites your main board.</li>
+          <li>It's saved automatically every time you make a change — there's no "save" button to remember to click.</li>
+        </ul>
+      </div>
+    </details>
 
-    <div class="faq">
-      <h3>Does that mean it's only on this one computer?</h3>
-      <p>Yes. Local storage is not synced between devices or browsers — it doesn't even follow you if you switch from Chrome to Edge on the <em>same</em> computer. Your roadmap on your work laptop and your roadmap on your home computer are two entirely separate copies unless you deliberately move data between them (via Backup JSON, Share link, or Cloud).</p>
-    </div>
+    <details class="faq" name="basics">
+      <summary><span class="q">Does that mean it's only on this one computer?</span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>Yes. Local storage is not synced between devices or browsers — it doesn't even follow you if you switch from Chrome to Edge on the <em>same</em> computer. Your roadmap on your work laptop and your roadmap on your home computer are two entirely separate copies unless you deliberately move data between them (via Backup JSON, Share link, or Cloud).</p>
+      </div>
+    </details>
 
-    <div class="faq">
-      <h3>What happens if I close the tab, restart my laptop, or come back next week?</h3>
-      <p>Nothing changes — local storage persists across restarts and browser closes indefinitely. It only disappears if:</p>
-      <ul>
-        <li>you (or your IT policy) clear browsing data / site data for this domain,</li>
-        <li>you use a private/incognito window (cleared when the window closes),</li>
-        <li>or you use a different browser or device.</li>
-      </ul>
-      <p>If any of those apply to you, use <strong>Backup JSON</strong> (in the Actions menu) to save a copy you control.</p>
-    </div>
+    <details class="faq" name="basics">
+      <summary><span class="q">What happens if I close the tab, restart my laptop, or come back next week?</span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>Nothing changes — local storage persists across restarts and browser closes indefinitely. It only disappears if:</p>
+        <ul>
+          <li>you (or your IT policy) clear browsing data / site data for this domain,</li>
+          <li>you use a private/incognito window (cleared when the window closes),</li>
+          <li>or you use a different browser or device.</li>
+        </ul>
+        <p>If any of those apply to you, use <strong>Backup JSON</strong> (in the Actions menu) to save a copy you control.</p>
+      </div>
+    </details>
 
     <h2>Sharing a link</h2>
 
-    <div class="faq">
-      <h3>When I click "Share as URL," is my roadmap uploaded somewhere? <span class="tag optin">Opt-in</span></h3>
-      <p>No. Your entire board (columns, teams, items) is compressed and encoded directly <em>into the link itself</em>, after <code>#share=</code>. No server is involved in generating it — it's built in your browser.</p>
-      <p>The data only "exists" wherever you paste that link. If you never send it to anyone, it never leaves your machine. If you paste it into Slack or email, the data travels exactly as far as that link does — and only that far.</p>
-    </div>
+    <details class="faq" name="sharing">
+      <summary><span class="q">When I click "Share as URL," is my roadmap uploaded somewhere? <span class="tag optin">Opt-in</span></span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>No. Your entire board (columns, teams, items) is compressed and encoded directly <em>into the link itself</em>, after <code>#share=</code>. No server is involved in generating it — it's built in your browser.</p>
+        <p>The data only "exists" wherever you paste that link. If you never send it to anyone, it never leaves your machine. If you paste it into Slack or email, the data travels exactly as far as that link does — and only that far.</p>
+      </div>
+    </details>
 
     <h2>Cloud saving &amp; publishing</h2>
 
-    <div class="faq">
-      <h3>What does the "Cloud" button do? <span class="tag optin">Opt-in</span></h3>
-      <p>This is the one feature that stores data on a server (Supabase, a hosted database) rather than only in your browser — but only for roadmaps you explicitly choose to save there. Nothing is sent to the cloud until you click <strong>Cloud</strong>.</p>
-      <p>There is no login and no user account. Instead, each cloud roadmap gets:</p>
-      <ul>
-        <li>a random <strong>id</strong> — used for view links,</li>
-        <li>a secret <strong>edit key</strong> — generated in your browser and required to make changes.</li>
-      </ul>
-      <p>Ownership isn't tied to "you" as a person — it's tied to whoever holds that secret key. Your browser keeps a local list of your own cloud roadmaps (their ids + keys) so you can find them again; that list itself lives in local storage, same as everything else.</p>
-    </div>
+    <details class="faq" name="cloud">
+      <summary><span class="q">What does the "Cloud" button do? <span class="tag optin">Opt-in</span></span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>This is the one feature that stores data on a server (Supabase, a hosted database) rather than only in your browser — but only for roadmaps you explicitly choose to save there. Nothing is sent to the cloud until you click <strong>Cloud</strong>.</p>
+        <p>There is no login and no user account. Instead, each cloud roadmap gets:</p>
+        <ul>
+          <li>a random <strong>id</strong> — used for view links,</li>
+          <li>a secret <strong>edit key</strong> — generated in your browser and required to make changes.</li>
+        </ul>
+        <p>Ownership isn't tied to "you" as a person — it's tied to whoever holds that secret key. Your browser keeps a local list of your own cloud roadmaps (their ids + keys) so you can find them again; that list itself lives in local storage, same as everything else.</p>
+      </div>
+    </details>
 
-    <div class="faq">
-      <h3>What's the difference between saving and publishing?</h3>
-      <p>Cloud roadmaps keep <strong>two copies</strong> on the server:</p>
-      <ul>
-        <li><strong>Working copy</strong> — private, auto-saved as you edit. Only readable with your secret edit key.</li>
-        <li><strong>Published copy</strong> — what a view-only link shows to colleagues. It only updates when you click <strong>Publish</strong>.</li>
-      </ul>
-      <p>So colleagues with a view link never see half-finished edits — they see whatever you last published.</p>
-    </div>
+    <details class="faq" name="cloud">
+      <summary><span class="q">What's the difference between saving and publishing?</span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>Cloud roadmaps keep <strong>two copies</strong> on the server:</p>
+        <ul>
+          <li><strong>Working copy</strong> — private, auto-saved as you edit. Only readable with your secret edit key.</li>
+          <li><strong>Published copy</strong> — what a view-only link shows to colleagues. It only updates when you click <strong>Publish</strong>.</li>
+        </ul>
+        <p>So colleagues with a view link never see half-finished edits — they see whatever you last published.</p>
+      </div>
+    </details>
 
-    <div class="faq">
-      <h3>What exactly gets stored in the cloud?</h3>
-      <p>Just the roadmap content itself — title, columns, teams, and items, as plain data. No account details, no email address, no tracking, no login credentials — there's nothing to enter, because there's no account.</p>
-    </div>
+    <details class="faq" name="cloud">
+      <summary><span class="q">What exactly gets stored in the cloud?</span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>Just the roadmap content itself — title, columns, teams, and items, as plain data. No account details, no email address, no tracking, no login credentials — there's nothing to enter, because there's no account.</p>
+      </div>
+    </details>
 
     <h2>Manual export/import</h2>
 
-    <div class="faq">
-      <h3>What about "Backup JSON," "Restore JSON," "Export CSV," and "Import CSV"?</h3>
-      <p>These save a file to your own computer's downloads folder (or read one back in) — the same as saving a Word document. The app doesn't upload these files anywhere; they only exist wherever you choose to keep them afterwards.</p>
-    </div>
+    <details class="faq" name="backup">
+      <summary><span class="q">What about "Backup JSON," "Restore JSON," "Export CSV," and "Import CSV"?</span><svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 7.5 10 12.5 15 7.5"/></svg></summary>
+      <div class="faq-body">
+        <p>These save a file to your own computer's downloads folder (or read one back in) — the same as saving a Word document. The app doesn't upload these files anywhere; they only exist wherever you choose to keep them afterwards.</p>
+      </div>
+    </details>
 
     <h2>At a glance</h2>
 

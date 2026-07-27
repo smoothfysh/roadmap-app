@@ -7,6 +7,12 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.13.0 — 2026-07-20
+
+- Added SEO/discoverability metadata to `index.html`: `description`, `classification`,
+  `category`, and `keywords` meta tags, plus a `SoftwareApplication` JSON-LD schema block
+  (name, url, description, category, author, offer, feature list, audience, keywords).
+
 ## 4.12.0 — 2026-07-14
 
 - Added a **Help** button (top-right of the header, next to Actions) that opens a new
