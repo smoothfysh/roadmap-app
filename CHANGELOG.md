@@ -7,6 +7,30 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.14.0 — 2026-07-27
+
+- **Redesigned the Gantt view** for a cleaner, wider timeline:
+  - **Variable-resolution columns** — individual months for the previous/current/next quarter,
+    then the two nearest future quarters, then calendar half-years further out (and coarse
+    quarters for any past items). Near-term is detailed, far-term is compressed.
+  - **Full browser width** — dropped the `max-w-[1400px]` cap so the board fills the viewport.
+  - **Default scroll** now lands on the last month of the previous quarter (≈1 month of
+    back-history + the current quarter), still scrollable both directions.
+  - **Two-line workstream labels** — a team name like `AUTHENTICATION (aka FIREFLY)` renders as
+    a bold main name (`Authentication`) with a lighter codename (`Firefly`) beneath it. This
+    parsing/casing is Gantt-only; stored team names are unchanged.
+  - **Pastel status bars** — soft fill + coloured left accent + right-aligned grey country tag,
+    replacing the saturated solid bars. Colours still map to status (this mapping is local to
+    the Gantt view; other views are untouched).
+  - Collapsed the 3-row header (year/quarter/month) into a single column-label row.
+  - **Today marker** — a thin vertical red line (with a `Today` tag in the header) marks the
+    current date across all rows.
+  - **Drag-to-pan** — click and drag anywhere on the empty timeline to scroll left/right;
+    starting the drag on a bar still opens that item.
+  - **Default scroll centres the current month** in the visible area (clamped to the left edge
+    when there isn't enough history to fully centre it).
+  - Bumped the item bar height slightly for legibility.
+
 ## 4.13.0 — 2026-07-20
 
 - Added SEO/discoverability metadata to `index.html`: `description`, `classification`,
