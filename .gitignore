@@ -31,3 +31,10 @@ src/App.[0-9]*.jsx
 
 # Local dev tooling config
 .claude/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
