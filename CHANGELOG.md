@@ -7,6 +7,24 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.15.0 — 2026-07-29
+
+- **Publish now sanity-checks the live version before overwriting it.** In cloud edit mode
+  (`?id=…&key=…`), clicking **PUBLISH** first re-reads the published copy:
+  - If nothing newer is live, it publishes immediately — same one-click behaviour as before.
+  - If someone published *after* this session opened the roadmap (e.g. you edited on another
+    machine and forgot), a confirm modal appears showing when the live version was published,
+    when your version was loaded, and an items/teams/columns comparison — with
+    **Overwrite anyway** / **Cancel**, and a pointer to *↩ Revert to published*.
+  - If the check can't run (offline / read failed), it says so rather than publishing blind,
+    and lets you proceed anyway.
+- The check compares two **server-issued** `published_at` stamps (the one recorded at load vs
+  the one read at click time), so a drifted local clock can't skew it. Identical published
+  content is treated as safe even if the stamp moved, to avoid false warnings.
+- `cloud.js`: added `loadPublishedRow()` (returns `data` + `published_at`); `loadPublished()`
+  is unchanged for existing callers. *Revert to published* now also refreshes the baseline stamp.
+- Publish buttons show a brief **Checking…** state during the pre-publish read.
+
 ## 4.14.0 — 2026-07-27
 
 - **Redesigned the Gantt view** for a cleaner, wider timeline:

@@ -69,16 +69,28 @@ export async function publishRoadmap(id, key) {
   if (error) throw error;
 }
 
-// Read the PUBLIC published copy by id (no key). Returns the data object, or null if
-// the roadmap has never been published.
-export async function loadPublished(id) {
+// Read the PUBLIC published row by id (no key) — the data plus the server-issued
+// published_at stamp. Returns null if the roadmap has never been published.
+//
+// published_at comes from Postgres now(), so two reads of it are always on the SAME
+// clock. That's what makes the pre-publish freshness check exact: we compare a stamp
+// the server gave us earlier against a stamp the server gives us now — never against
+// this machine's clock, which may have drifted.
+export async function loadPublishedRow(id) {
   const { data, error } = await supabase
     .from("roadmap_published")
-    .select("data")
+    .select("data, published_at")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return data ? data.data : null;
+  return data ? { data: data.data, publishedAt: data.published_at } : null;
+}
+
+// Read the PUBLIC published copy by id (no key). Returns the data object, or null if
+// the roadmap has never been published.
+export async function loadPublished(id) {
+  const row = await loadPublishedRow(id);
+  return row ? row.data : null;
 }
 
 // Canonical JSON (recursively sorted keys) so we can compare the working copy to the

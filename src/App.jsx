@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle } from "lucide-react";
 import { version } from "../package.json";
 import { supabase, cloudEnabled } from "./supabaseClient";
-import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, stableStringify } from "./cloud";
+import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
 
 // Single app-wide version shown in every tab footer — sourced from package.json.
 // Bump the "version" field there on significant changes.
@@ -789,7 +789,10 @@ export default function RoadmapTracker() {
   const [cloudCopyMsg, setCloudCopyMsg] = useState("");         // transient "copied" confirmation
   const [cloudTick, setCloudTick] = useState(0);                // bump to re-read the local list
   const [cloudPublishedCanon, setCloudPublishedCanon] = useState(null); // canonical JSON of the published copy (null = never published)
+  const [cloudPublishedAt, setCloudPublishedAt] = useState(null);       // server published_at stamp we last saw (baseline for the freshness check)
   const [cloudPublishing, setCloudPublishing] = useState(false);
+  const [publishChecking, setPublishChecking] = useState(false);        // re-reading the live published row before overwriting it
+  const [publishGuard, setPublishGuard] = useState(null);               // { kind: "newer" | "unverified", ... } → confirm modal before overwriting
   const [cloudViewError, setCloudViewError] = useState(false);  // ?id= view: roadmap not published / not found
   const [cloudViewId, setCloudViewId] = useState(null);         // id of a published roadmap being viewed (drives realtime)
   const [cloudLive, setCloudLive] = useState(false);            // realtime channel subscribed
@@ -823,9 +826,14 @@ export default function RoadmapTracker() {
             rememberRoadmap({ id: CLOUD_ID, key: CLOUD_KEY, title: loaded.title });
             try { localStorage.setItem(cloudStorageKey(CLOUD_ID), JSON.stringify(loaded)); } catch { /* ignore */ }
             try {
-              const pub = await loadPublished(CLOUD_ID);
-              setCloudPublishedCanon(pub ? stableStringify(pub) : null);
-            } catch { /* ignore — treat as never published */ }
+              // Snapshot BOTH the published content and its server published_at stamp.
+              // The stamp is the baseline for the pre-publish freshness check: if the live
+              // stamp has moved on by the time we publish, someone published from another
+              // machine after we opened this and we must not silently overwrite them.
+              const row = await loadPublishedRow(CLOUD_ID);
+              setCloudPublishedCanon(row ? stableStringify(row.data) : null);
+              setCloudPublishedAt(row ? row.publishedAt : null);
+            } catch { /* ignore — treat as never published (publish then asks before overwriting) */ }
             setLoading(false);
             return;
           }
@@ -1244,13 +1252,23 @@ export default function RoadmapTracker() {
     setCloudTick((t) => t + 1);
   };
 
-  // Publish the working copy → published copy (what viewers see).
-  const handlePublish = async () => {
+  // Publish the working copy → published copy (what viewers see). No checks — call only
+  // after the freshness check below has passed (or the user chose to overwrite anyway).
+  const doPublish = async () => {
     if (!cloudRoadmap) return;
     try {
       setCloudPublishing(true);
       await publishRoadmap(cloudRoadmap.id, cloudRoadmap.key);
       setCloudPublishedCanon(stableStringify(data));
+      // Re-read the row so our baseline stamp is the one the server just wrote —
+      // otherwise the NEXT publish from this session would look like someone else's.
+      try {
+        const row = await loadPublishedRow(cloudRoadmap.id);
+        if (row) {
+          setCloudPublishedCanon(stableStringify(row.data));
+          setCloudPublishedAt(row.publishedAt);
+        }
+      } catch { /* couldn't refresh the stamp — next publish just asks before overwriting */ }
       setCloudCopyMsg("Published — viewers now see the latest");
       setTimeout(() => setCloudCopyMsg(""), 2400);
     } catch (e) {
@@ -1258,6 +1276,47 @@ export default function RoadmapTracker() {
       alert("Couldn't publish: " + (e?.message || e));
     } finally {
       setCloudPublishing(false);
+    }
+  };
+
+  // PUBLISH click → sanity-check that we aren't about to bury a NEWER published version.
+  //
+  // Why this exists: the cloud working copy is shared across machines, so a tab left open
+  // on one machine (or a session that loaded while offline and fell back to its local
+  // cache) holds a stale idea of what's live. Publishing from it would wipe out work
+  // published from the other machine.
+  //
+  // The check compares two stamps that both come from the Postgres clock — the published_at
+  // we recorded when this session loaded vs the published_at right now — so a drifted local
+  // clock can't skew it. Identical content is treated as safe even if the stamp moved
+  // (a republish of the same board loses nothing), which keeps false warnings out.
+  const handlePublish = async () => {
+    if (!cloudRoadmap) return;
+    setPublishChecking(true);
+    try {
+      const row = await loadPublishedRow(cloudRoadmap.id);
+      const sameStamp = !!row?.publishedAt && !!cloudPublishedAt && row.publishedAt === cloudPublishedAt;
+      const sameContent = !!row && stableStringify(row.data) === cloudPublishedCanon;
+      if (!row || sameStamp || sameContent) {
+        // Never published, or the live version is exactly the one we already knew about
+        // (i.e. it's older than / identical to our baseline) → publish straight away.
+        setPublishChecking(false);
+        await doPublish();
+        return;
+      }
+      setPublishGuard({
+        kind: "newer",
+        publishedAt: row.publishedAt || null,
+        baselineAt: cloudPublishedAt,
+        theirs: row.data,
+      });
+    } catch (e) {
+      // Couldn't verify what's live (offline / read failed). Don't publish blind, and
+      // don't block either — say so and let the user decide.
+      console.error("Publish freshness check failed:", e);
+      setPublishGuard({ kind: "unverified", error: e?.message || String(e) });
+    } finally {
+      setPublishChecking(false);
     }
   };
 
@@ -1278,11 +1337,15 @@ export default function RoadmapTracker() {
     }
     if (!confirm("Discard your current working changes and restore the last PUBLISHED version? This replaces what you're editing now (you can Ctrl+Z this).")) return;
     try {
-      const pub = await loadPublished(cloudRoadmap.id);
+      const row = await loadPublishedRow(cloudRoadmap.id);
+      const pub = row?.data;
       if (pub?.columns && pub?.teams && pub?.items) {
         if (!pub.title) pub.title = seedData.title;
         saveData(pub); // records an undo snapshot; auto-save then re-syncs the working copy
         setCloudPublishedCanon(stableStringify(pub));
+        // We've just seen the live published row — move the freshness baseline forward so
+        // publishing right after a revert doesn't warn about a version we just pulled in.
+        setCloudPublishedAt(row.publishedAt);
         setCloudCopyMsg("Reverted to published");
         setTimeout(() => setCloudCopyMsg(""), 2200);
       } else {
@@ -2059,15 +2122,15 @@ export default function RoadmapTracker() {
               {cloudEnabled && !isPreview && cloudRoadmap && (
                 <button
                   onClick={handlePublish}
-                  disabled={cloudPublishing || !cloudUnpublished}
+                  disabled={cloudPublishing || publishChecking || !cloudUnpublished}
                   className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors ${
                     cloudUnpublished
                       ? "border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800"
                       : "border-stone-200 bg-white text-stone-400 cursor-default"
                   }`}
-                  title={cloudUnpublished ? "Publish your changes so viewers see the latest" : "All changes published — viewers see the latest"}
+                  title={cloudUnpublished ? "Publish your changes so viewers see the latest (checks first that nothing newer is already published)" : "All changes published — viewers see the latest"}
                 >
-                  {cloudPublishing ? "Publishing…" : cloudUnpublished ? "● Publish" : "Published ✓"}
+                  {publishChecking ? "Checking…" : cloudPublishing ? "Publishing…" : cloudUnpublished ? "● Publish" : "Published ✓"}
                 </button>
               )}
 
@@ -2751,10 +2814,10 @@ export default function RoadmapTracker() {
                       )}
                       <button
                         onClick={handlePublish}
-                        disabled={cloudPublishing || !cloudUnpublished}
+                        disabled={cloudPublishing || publishChecking || !cloudUnpublished}
                         className="text-[10px] font-semibold uppercase tracking-wider bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded px-3 py-1.5 transition-colors"
                       >
-                        {cloudPublishing ? "Publishing…" : "Publish"}
+                        {publishChecking ? "Checking…" : cloudPublishing ? "Publishing…" : "Publish"}
                       </button>
                       {cloudPublishedCanon !== null && (
                         <button
@@ -2860,6 +2923,105 @@ export default function RoadmapTracker() {
           </div>
         </div>
       )}
+
+      {/* Pre-publish safety modal — the live published version moved on since we loaded,
+          or we couldn't check. Publishing would overwrite it, so confirm first. */}
+      {publishGuard && (() => {
+        const g = publishGuard;
+        const theirs = g.theirs || null;
+        const rows = theirs ? [
+          ["Items", theirs.items?.length ?? 0, data.items?.length ?? 0],
+          ["Teams", theirs.teams?.length ?? 0, data.teams?.length ?? 0],
+          ["Columns", theirs.columns?.length ?? 0, data.columns?.length ?? 0],
+        ] : [];
+        const absolute = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "unknown");
+        return (
+          <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center p-6 z-[70]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[88vh]" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-stone-100">
+                <div className="text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-amber-700 mb-1">⚠ Hold on</div>
+                <div className="text-base font-bold text-stone-900">
+                  {g.kind === "newer" ? "Newer content is already published" : "Couldn’t check what’s published"}
+                </div>
+              </div>
+
+              <div className="px-5 py-4 overflow-y-auto">
+                {g.kind === "newer" ? (
+                  <>
+                    <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-[12px] text-amber-800 leading-relaxed mb-3">
+                      <span>🕗</span>
+                      <span>
+                        Someone published <strong>after you opened this roadmap</strong> — most likely you, from another machine.
+                        Publishing now <strong>replaces that newer version</strong> with what’s on this screen.
+                      </span>
+                    </div>
+
+                    <dl className="text-[11px] text-stone-600 space-y-1 mb-3">
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-stone-400 font-mono uppercase tracking-wider text-[9px] pt-0.5">Live version published</dt>
+                        <dd className="font-semibold text-stone-800 text-right">{g.publishedAt ? `${formatHistoryDate(g.publishedAt)} · ${absolute(g.publishedAt)}` : "just now (time unknown)"}</dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-stone-400 font-mono uppercase tracking-wider text-[9px] pt-0.5">You’re working from</dt>
+                        <dd className="text-right">{g.baselineAt ? `${formatHistoryDate(g.baselineAt)} · ${absolute(g.baselineAt)}` : "an unknown version"}</dd>
+                      </div>
+                    </dl>
+
+                    {rows.length > 0 && (
+                      <div className="border border-stone-200 rounded-lg overflow-hidden mb-3">
+                        <div className="grid grid-cols-3 text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400 bg-stone-50 border-b border-stone-200 px-3 py-1.5">
+                          <span></span><span className="text-right">Published</span><span className="text-right">Yours</span>
+                        </div>
+                        {rows.map(([label, a, b]) => (
+                          <div key={label} className="grid grid-cols-3 text-[12px] px-3 py-1.5 border-b border-stone-100 last:border-0">
+                            <span className="text-stone-500">{label}</span>
+                            <span className="text-right font-semibold text-stone-800">{a}</span>
+                            <span className={`text-right font-semibold ${b === a ? "text-stone-800" : b < a ? "text-rose-600" : "text-emerald-600"}`}>{b}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="text-[11px] text-stone-500 leading-relaxed">
+                      Not sure? <strong className="text-stone-700">Cancel</strong>, then use <strong className="text-stone-700">↩ Revert to published</strong>
+                      {" "}to pull the newer version in and carry on from there. Nothing is lost either way until you overwrite.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-[12px] text-amber-800 leading-relaxed mb-3">
+                      <span>📡</span>
+                      <span>
+                        We couldn’t read the currently published version, so we can’t tell whether it’s newer than yours.
+                        Publishing now would overwrite it either way.
+                      </span>
+                    </div>
+                    {g.error && <div className="text-[10px] font-mono text-stone-400 break-words mb-2">{g.error}</div>}
+                    <div className="text-[11px] text-stone-500 leading-relaxed">
+                      If you might have published from another machine recently, cancel and retry once you’re back online.
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="px-5 py-3 border-t border-stone-100 flex justify-end gap-2">
+                <button
+                  onClick={() => setPublishGuard(null)}
+                  className="text-[13px] font-semibold text-stone-600 hover:text-stone-900 px-4 py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => { setPublishGuard(null); await doPublish(); }}
+                  className="text-[13px] font-semibold bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  Overwrite anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Quarter summary modal */}
       {summaryModalOpen && (() => {
