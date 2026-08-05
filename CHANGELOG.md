@@ -7,6 +7,17 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.16.1 — 2026-08-05
+
+- **Fixed: the Gantt "today" marker could show a stale date.** The timeline layout read the
+  current date inside a `useMemo` keyed only on the items array, so "today" was frozen at the
+  moment the layout was first computed — a tab left open past midnight kept drawing the old
+  line, and on a published/preview roadmap (where the items never change locally) it stayed at
+  page-load date for the life of the tab. The current date is now state that re-reads as the day
+  rolls over, checked on a 1-minute tick plus on tab focus/visibility change (background tabs
+  throttle timers, so the tick alone isn't enough). The marker's placement maths was already
+  correct and is unchanged.
+
 ## 4.16.0 — 2026-08-05
 
 - **Gantt swim lanes are now collapsible.** Click anywhere in a workstream's label cell in the

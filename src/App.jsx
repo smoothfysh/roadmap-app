@@ -763,6 +763,10 @@ export default function RoadmapTracker() {
     } catch { return true; }
   });
   const [ganttColW, setGanttColW] = useState(96); // month column width, sized so ~9 months fill the viewport
+  // Current date, re-read as the day rolls over so the Gantt "today" marker never goes stale on a
+  // tab that stays open (e.g. a roadmap left up on a screen). Identity only changes on a new day,
+  // so nothing downstream recomputes in between.
+  const [today, setToday] = useState(() => new Date());
   // Gantt: ids of collapsed workstream lanes. Empty = every lane expanded (the default).
   // Persisted to localStorage only — it's a view preference, not roadmap data.
   const [ganttCollapsed, setGanttCollapsed] = useState(() => {
@@ -1913,7 +1917,24 @@ export default function RoadmapTracker() {
   );
 
   // Gantt: variable-resolution timeline layout (months near-term → quarters → half-years).
-  const ganttLayout = useMemo(() => buildGanttLayout(displayData.items, new Date()), [displayData.items]);
+  // `today` comes from state (not a bare `new Date()` in here) so the today marker follows the
+  // real date on a long-lived tab instead of freezing at page-load time.
+  const ganttLayout = useMemo(() => buildGanttLayout(displayData.items, today), [displayData.items, today]);
+
+  // Keep `today` on the real current day. Background tabs throttle timers heavily, so also
+  // re-check when the tab regains focus/visibility — otherwise a tab woken after midnight could
+  // sit on the old date until its next tick.
+  useEffect(() => {
+    const check = () => setToday((prev) => (prev.toDateString() === new Date().toDateString() ? prev : new Date()));
+    const iv = setInterval(check, 60000);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
 
   // Gantt: size columns so ~9 fill the viewport width (prev sliver + current + next quarter).
   useEffect(() => {
