@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle } from "lucide-react";
 import { version } from "../package.json";
 import { supabase, cloudEnabled } from "./supabaseClient";
 import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
@@ -38,6 +38,11 @@ const CLOUD_KEY = (() => {
 // Per-roadmap localStorage key for a cloud roadmap, so cloud editing has its own local
 // cache and never overwrites the default local roadmap (STORAGE_KEY = "roadmap-data").
 const cloudStorageKey = (id) => `roadmap-cloud-${id}`;
+
+// Gantt view: which workstream lanes are collapsed. Local-only UI preference (never part of
+// the roadmap data, so it's never shared, exported or synced). Keyed per roadmap so a scoped
+// or cloud copy keeps its own collapse state.
+const GANTT_COLLAPSE_KEY = `roadmap-gantt-collapsed-${CLOUD_ID ? `cloud-${CLOUD_ID}` : SCOPE_NAME || "default"}`;
 
 // ---------- Seed data ----------
 const seedData = {
@@ -758,6 +763,21 @@ export default function RoadmapTracker() {
     } catch { return true; }
   });
   const [ganttColW, setGanttColW] = useState(96); // month column width, sized so ~9 months fill the viewport
+  // Gantt: ids of collapsed workstream lanes. Empty = every lane expanded (the default).
+  // Persisted to localStorage only — it's a view preference, not roadmap data.
+  const [ganttCollapsed, setGanttCollapsed] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(GANTT_COLLAPSE_KEY));
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    } catch { return []; }
+  });
+  const persistGanttCollapsed = (ids) => {
+    setGanttCollapsed(ids);
+    try { localStorage.setItem(GANTT_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
+  };
+  const toggleGanttCollapse = (teamId) => persistGanttCollapsed(
+    ganttCollapsed.includes(teamId) ? ganttCollapsed.filter((x) => x !== teamId) : [...ganttCollapsed, teamId]
+  );
   const [modalTab, setModalTab] = useState("details"); // "details" | "outcome"
   const initialModalTabRef = useRef("details"); // tab to land on when the modal next opens (reset after use)
   const teamDetailDraftRef = useRef(null); // textarea holding the roster while editing in the team modal
@@ -2682,6 +2702,7 @@ export default function RoadmapTracker() {
           }
 
           const gridCols = `repeat(${N}, ${COL}px)`;
+          const allLanesCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => ganttCollapsed.includes(t.id));
 
           return (
             <div className="w-full">
@@ -2695,8 +2716,14 @@ export default function RoadmapTracker() {
               {/* Pinned header — single row of variable-resolution columns (syncs with the body) */}
               <div ref={ganttHeaderRef} className="sticky top-0 z-30 overflow-hidden border border-b-0 border-stone-200 rounded-t-xl bg-white">
                 <div className="flex">
-                  <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center px-4" style={{ width: LABEL, height: 36 }}>
+                  <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center gap-2 px-4" style={{ width: LABEL, height: 36 }}>
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">Workstream</span>
+                    <button
+                      onClick={() => persistGanttCollapsed(allLanesCollapsed ? [] : displayData.teams.map((t) => t.id))}
+                      title={allLanesCollapsed ? "Expand every workstream lane" : "Collapse every workstream lane"}
+                      className="ml-auto text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400 hover:text-stone-800 transition-colors">
+                      {allLanesCollapsed ? "Expand all" : "Collapse all"}
+                    </button>
                   </div>
                   <div className="relative" style={{ display: "grid", gridTemplateColumns: gridCols }}>
                     {segments.map((seg) => (
@@ -2720,14 +2747,38 @@ export default function RoadmapTracker() {
                 {displayData.teams.map((team) => {
                   const teamRows = scheduled.filter((x) => x.it.teamId === team.id);
                   const { main, code } = parseWorkstreamName(team.name);
+                  const collapsed = ganttCollapsed.includes(team.id);
+                  // Collapsed lane: one muted band spanning the workstream's overall date range,
+                  // so the row still shows *when* the work sits without listing every item.
+                  const bandLeft = collapsed && teamRows.length > 0 ? Math.min(...teamRows.map((r) => colOfMo(r.startMo))) * COL : 0;
+                  const bandRight = collapsed && teamRows.length > 0 ? Math.max(...teamRows.map((r) => colOfMo(r.endMo))) * COL : 0;
                   return (
                     <div key={team.id} className="flex border-b border-stone-200 last:border-b-0" style={{ width: LABEL + N * COL }}>
-                      <div className="sticky left-0 z-20 bg-white border-r border-stone-200 flex-shrink-0 flex flex-col justify-center px-4 py-3" style={{ width: LABEL }}>
-                        <span className="text-[13px] font-bold text-stone-800 leading-tight">{main}</span>
-                        {code && <span className="text-[11px] font-mono text-stone-400 leading-tight mt-0.5">{code}</span>}
-                      </div>
+                      {/* Whole label cell is the collapse/expand hit area (not just the text) */}
+                      <button onClick={() => toggleGanttCollapse(team.id)} title={collapsed ? "Expand this workstream" : "Collapse this workstream"}
+                        className="group sticky left-0 z-20 bg-white hover:bg-stone-50 border-r border-stone-200 flex-shrink-0 flex flex-col justify-center px-3 py-3 text-left transition-colors" style={{ width: LABEL }}>
+                        <span className="flex items-start gap-1.5">
+                          <ChevronDown className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-stone-400 group-hover:text-stone-800 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-bold text-stone-800 leading-tight">{main}</span>
+                            {code && <span className="block text-[11px] font-mono text-stone-400 leading-tight mt-0.5">{code}</span>}
+                            {collapsed && (
+                              <span className="block text-[9px] font-mono uppercase tracking-wider text-stone-400 mt-1">
+                                {teamRows.length} item{teamRows.length === 1 ? "" : "s"} hidden
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      </button>
                       <div className="relative flex-shrink-0 py-2 cursor-grab" style={{ width: N * COL, backgroundImage: `repeating-linear-gradient(to right, transparent 0, transparent ${COL - 1}px, #f1f0ef ${COL - 1}px, #f1f0ef ${COL}px)` }}>
-                        {teamRows.length === 0 ? (
+                        {collapsed ? (
+                          <div className="relative" style={{ height: 22 }}>
+                            {teamRows.length > 0 && (
+                              <div className="absolute rounded bg-stone-200 border-l-4 border-stone-400"
+                                style={{ top: 5, left: bandLeft + 2, width: Math.max(10, bandRight - bandLeft - 4), height: 12 }} />
+                            )}
+                          </div>
+                        ) : teamRows.length === 0 ? (
                           <div style={{ height: 22 }} />
                         ) : teamRows.map(({ it, startMo, endMo }) => {
                           const { cleanText } = getItemDisplay(it);
@@ -2756,6 +2807,7 @@ export default function RoadmapTracker() {
 
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any bar to open the item · <span className="font-bold">drag</span> the timeline to scroll · the red line marks today</span>}
+                <span><span className="font-bold">Click</span> a workstream name to collapse or expand its lane</span>
                 <span className="ml-auto opacity-40">{APP_VERSION}</span>
               </div>
             </div>

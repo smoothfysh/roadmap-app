@@ -7,6 +7,22 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.16.0 — 2026-08-05
+
+- **Gantt swim lanes are now collapsible.** Click anywhere in a workstream's label cell in the
+  Gantt view to collapse that lane; click again to expand it. The whole cell is the hit area
+  (not just the text), with a subtle hover highlight.
+  - All lanes are **expanded by default**.
+  - A collapsed lane stays visible as a slim muted band spanning that workstream's overall
+    date range, with an "N items hidden" note next to the name — so the row still shows *when*
+    the work sits without listing every item.
+  - **Collapse all / Expand all** button in the "Workstream" header cell, for isolating a
+    single lane quickly.
+- Collapse state is remembered in `localStorage` only (key
+  `roadmap-gantt-collapsed-<default|scope|cloud-id>`) — it is a per-browser view preference and
+  is never written into the roadmap data, so it doesn't affect sharing, backup, export or cloud
+  sync. Each scoped/cloud roadmap keeps its own collapse state.
+
 ## 4.15.0 — 2026-07-29
 
 - **Publish now sanity-checks the live version before overwriting it.** In cloud edit mode
