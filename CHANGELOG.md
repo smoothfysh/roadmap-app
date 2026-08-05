@@ -7,6 +7,55 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.18.0 — 2026-08-05
+
+- **Gantt: the timeline now zooms.** Days can be shown per month, and any column can be drilled into.
+  - **Click any header column to drill one step finer**: a half-year splits into its quarters, a
+    quarter into its months, a month into **individual days** — day numbers with weekday initials and
+    **weekends washed grey**. Drills stack, so clicking AUG then SEP leaves both showing days while
+    every other month stays compact. Nesting works too: split Q1 27 into months, then open just FEB.
+  - **Click the name above a drilled group to roll it back up** (e.g. "AUG 26" over a run of day
+    columns). Rolling up also discards drills nested inside, so re-opening starts one step in.
+  - **COMPACT / EXPAND buttons** (top right, next to the legend) are presets: **COMPACT** collapses
+    everything back to whole months; **EXPAND** — the default — shows the current quarter day by day.
+    Pressing either resets any per-column drilling and re-centres on today.
+  - A **TODAY · 5 AUG** pill now sits on the red today line, replacing the bare "Today" tag.
+  - The zoom is remembered in `localStorage` (`roadmap-gantt-zoom-<default|scope|cloud-id>`), per
+    roadmap, alongside the collapsed-lane state. `EXPAND` is stored as a preset rather than a fixed
+    list of months, so it keeps meaning "the current quarter" as the calendar moves on. Like collapse
+    state it is a local view preference only — never written into the roadmap data, so sharing,
+    backup, export and cloud sync are unaffected.
+  - Drilling into a column deliberately does **not** re-centre the view: a drill only widens columns
+    to the right of the click, so the column you clicked stays exactly where it was.
+- Gridlines now carry a hierarchy: faintest between days, slightly stronger on Mondays, stronger at
+  month starts, strongest where the timeline resolution changes. Weekend wash, gridlines and the
+  today line are drawn once behind all lanes, so they run continuously down the chart instead of
+  being repeated per row.
+- Dragging from a workstream label no longer pans the timeline, so click-to-collapse can't be
+  misread as a drag.
+- Internals: the Gantt layout engine now works in **absolute days → pixels** rather than uniform
+  column indices, since columns no longer share a single width. Columns are emitted recursively so a
+  drill can nest, and one formula places every bar at any resolution — exact-date placement from
+  4.17.0 is preserved at every zoom level (an item that ended yesterday stops flush against the today
+  line whether its month is showing days, months, quarters or half-years).
+
+## 4.17.0 — 2026-08-05
+
+- **Fixed: Gantt bars are now placed on their exact dates.** Bars were snapped to quarter-month
+  slots (roughly week-sized), with end dates rounded *up* to the right edge of their slot — so
+  anything ending on the 1st–8th of a month was drawn as if it ended on the 8th. Combined with a
+  today marker drawn at the exact day, an item that finished *yesterday* visibly stuck out past
+  the red line, and items ending on the 1st, the 4th and today all rendered in the same place.
+  Start/end positions now use the exact day-of-month, so:
+  - an item that ended yesterday stops flush against the today marker;
+  - an item ending today extends just past it (the day isn't over — it isn't late yet);
+  - dates within the same week are now visually distinct.
+- **Short bars no longer spill past their end date.** A bar too narrow to meet the 10px minimum
+  width now grows *leftward* instead of rightward, so a one- or two-day item can't overshoot the
+  today marker. Same rule applies to the collapsed-lane summary band.
+- Removed the old "minimum quarter-month span" inflation, which stretched short items forward by
+  up to a week. Reversed start/end dates are now swapped cleanly rather than approximated.
+
 ## 4.16.1 — 2026-08-05
 
 - **Fixed: the Gantt "today" marker could show a stale date.** The timeline layout read the

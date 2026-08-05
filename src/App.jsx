@@ -39,10 +39,23 @@ const CLOUD_KEY = (() => {
 // cache and never overwrites the default local roadmap (STORAGE_KEY = "roadmap-data").
 const cloudStorageKey = (id) => `roadmap-cloud-${id}`;
 
-// Gantt view: which workstream lanes are collapsed. Local-only UI preference (never part of
-// the roadmap data, so it's never shared, exported or synced). Keyed per roadmap so a scoped
-// or cloud copy keeps its own collapse state.
-const GANTT_COLLAPSE_KEY = `roadmap-gantt-collapsed-${CLOUD_ID ? `cloud-${CLOUD_ID}` : SCOPE_NAME || "default"}`;
+// Gantt view preferences — which lanes are collapsed, and compact vs expanded resolution. These
+// are local-only UI state (never part of the roadmap data, so never shared, exported or synced),
+// keyed per roadmap so a scoped or cloud copy keeps its own.
+const GANTT_PREF_SCOPE = CLOUD_ID ? `cloud-${CLOUD_ID}` : SCOPE_NAME || "default";
+const GANTT_COLLAPSE_KEY = `roadmap-gantt-collapsed-${GANTT_PREF_SCOPE}`;
+const GANTT_ZOOM_KEY = `roadmap-gantt-zoom-${GANTT_PREF_SCOPE}`;
+
+// Gantt timeline zoom. The COMPACT / EXPAND buttons are presets; clicking an individual column
+// switches to "custom" and edits an explicit list of drilled-into columns.
+//   { mode: "expand" }                    → the current quarter as days (resolved at read time,
+//                                            so it follows the calendar rather than sticking to
+//                                            whichever quarter was current when it was saved)
+//   { mode: "compact" }                   → every column at its coarsest
+//   { mode: "custom", drilled: [keys] }   → keys are "month:<ym>" | "quarter:<ym>" | "half:<ym>",
+//                                            ym = year * 12 + month index
+const GANTT_ZOOM_DEFAULT = { mode: "expand" };
+const GANTT_TIER_RANK = { half: 3, quarter: 2, month: 1 };
 
 // ---------- Seed data ----------
 const seedData = {
@@ -342,9 +355,13 @@ function extractDate(text) {
 }
 
 const MONTHS_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const DOW_ABBR = ["S", "M", "T", "W", "T", "F", "S"];   // weekday initials under the Gantt day numbers
 const GANTT_LABEL_W = 210;        // sticky workstream-label column width (px)
 const GANTT_VISIBLE_COLS = 9;     // ~columns that fill the viewport (prev sliver + current + next quarter)
 const GANTT_MIN_COL = 78;         // floor so columns stay wide & readable on small screens
+const GANTT_MIN_BAR = 10;         // min bar width (px) so a 1-day item stays visible & clickable
+const GANTT_DAY_W = 34;           // day column width (px) in EXPANDED mode
+const GANTT_COARSE_W = 96;        // month/quarter/half column width (px) in EXPANDED mode
 const MONTH_QUARTER = { JAN: "Q1", FEB: "Q1", MAR: "Q1", APR: "Q2", MAY: "Q2", JUN: "Q2", JUL: "Q3", AUG: "Q3", SEP: "Q3", OCT: "Q4", NOV: "Q4", DEC: "Q4" };
 
 // Gantt timeline: split a workstream label like "AUTHENTICATION (aka FIREFLY)" into a
@@ -361,81 +378,140 @@ function parseWorkstreamName(name) {
 // further out (and coarse quarters for any items in the past). Near-term is detailed, far-term
 // is compressed, so a wide horizon stays readable. Pixel positions are index × colWidth; this
 // returns continuous *column coordinates* so it's independent of the column width in px.
-function buildGanttLayout(items, now) {
-  const ymOf = (iso) => { const [y, m] = iso.split("-").map(Number); return y * 12 + (m - 1); };
-  const dayOf = (iso) => Number(iso.split("-")[2]) || 1;
-  // Day-of-month snapped to quarter slots. Start = left edge of its slot, End = right edge.
-  const startFrac = (d) => (d <= 8 ? 0 : d <= 15 ? 0.25 : d <= 23 ? 0.5 : 0.75);
-  const endFrac   = (d) => (d <= 8 ? 0.25 : d <= 15 ? 0.5 : d <= 23 ? 0.75 : 1);
+const absDayOf = (y, m, d) => Math.floor(Date.UTC(y, m, d) / 86400000);  // days since epoch
+const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
+const partsOf = (iso) => { const [y, m, d] = iso.split("-").map(Number); return { y, m: m - 1, d: d || 1 }; };
 
-  const scheduled = items.map((it) => {
+function buildGanttLayout(items, now, zoom, coarseW) {
+  // Resolve every item to an ordered start/end pair of calendar dates.
+  const dated = items.map((it) => {
     // No start date → default to the first working day of the end date's quarter.
     const sIso = it.startDate || (it.endDate ? quarterStartWorkingDay(it.endDate) : null);
     const eIso = it.endDate || it.startDate;
     if (!sIso || !eIso) return null;
-    let a = ymOf(sIso) + startFrac(dayOf(sIso));
-    let b = ymOf(eIso) + endFrac(dayOf(eIso));
-    if (b < a) { const t = a; a = b - 0.25; b = t; } // guard reversed dates
-    if (b - a < 0.25) b = a + 0.25;                  // keep a visible minimum
-    return { it, startMo: a, endMo: b };
+    const s = partsOf(sIso), e = partsOf(eIso);
+    // Reversed dates → swap the roles so the bar still spans the two dates the right way round.
+    return absDayOf(e.y, e.m, e.d) < absDayOf(s.y, s.m, s.d) ? { it, s: e, e: s } : { it, s, e };
   }).filter(Boolean);
   const unscheduled = items.filter((it) => !it.startDate && !it.endDate);
 
+  const ymOf = (p) => p.y * 12 + p.m;
   const cqStart = now.getFullYear() * 12 + Math.floor(now.getMonth() / 3) * 3; // current quarter's first month
   const monthZoneStart = cqStart - 3;  // previous quarter start
   const monthZoneEnd = cqStart + 5;    // next quarter end (inclusive)
+  const itemMin = dated.length ? Math.min(...dated.map((r) => ymOf(r.s))) : monthZoneStart;
+  const itemMax = dated.length ? Math.max(...dated.map((r) => ymOf(r.e))) : monthZoneEnd;
 
-  const itemMin = scheduled.length ? Math.floor(Math.min(...scheduled.map((s) => s.startMo))) : monthZoneStart;
-  const itemMax = scheduled.length ? Math.ceil(Math.max(...scheduled.map((s) => s.endMo))) - 1 : monthZoneEnd;
+  // Columns the user has drilled into. The CTAs are presets; "expand" resolves against the calendar
+  // here rather than being frozen into storage, so it always means "the current quarter".
+  const drilled = new Set(
+    zoom.mode === "expand" ? [`month:${cqStart}`, `month:${cqStart + 1}`, `month:${cqStart + 2}`]
+      : zoom.mode === "compact" ? []
+      : zoom.drilled || []
+  );
 
+  // ---- Columns. Same progressive compression as always (months near-term → quarters →
+  // half-years), but any column can be drilled one step finer: a half becomes its 2 quarters, a
+  // quarter its 3 months, a month its individual days — recursively, so a drilled month inside a
+  // drilled quarter shows days. Each column carries both its pixel box (x/w) and its day range
+  // (a/days), so one formula places every bar whatever the resolution.
   const segments = [];
-  // Past coarse zone — whole quarters back to the earliest item (rare; keeps old items placeable).
-  if (itemMin < monthZoneStart) {
-    for (let q = Math.floor(itemMin / 3) * 3; q < monthZoneStart; q += 3) segments.push({ type: "quarter", startYm: q, months: 3 });
-  }
-  // Month zone — prev + current + next quarter (9 individual months).
-  for (let k = monthZoneStart; k <= monthZoneEnd; k++) segments.push({ type: "month", startYm: k, months: 1 });
-  // Future coarse zone — at least the 2 nearest quarters, extended until a calendar half boundary…
-  let f = monthZoneEnd + 1, qCount = 0, guard = 0;
-  while (!(qCount >= 2 && (f % 12) % 6 === 0) && guard++ < 8) { segments.push({ type: "quarter", startYm: f, months: 3 }); f += 3; qCount++; }
-  // …then calendar half-years (H1/H2), only as far as items actually reach.
-  while (itemMax >= f && guard++ < 40) { segments.push({ type: "half", startYm: f, months: 6 }); f += 6; }
-
-  segments.forEach((seg, i) => {
-    seg.idx = i;
-    const m = seg.startYm % 12;                 // 0-based month
-    const yy = String(Math.floor(seg.startYm / 12) % 100).padStart(2, "0");
-    if (seg.type === "month") seg.label = m === 0 ? `JAN ${yy}` : MONTHS_ABBR[m];
-    else if (seg.type === "quarter") seg.label = `Q${Math.floor(m / 3) + 1} ${yy}`;
-    else seg.label = `${m < 6 ? "H1" : "H2"} ${yy}`;
-  });
-  const N = segments.length;
-
-  // Continuous column coordinate (0…N) for a month position (ym + within-month fraction).
-  const colOfMo = (mo) => {
-    if (!N) return 0;
-    if (mo <= segments[0].startYm) return 0;
-    const last = segments[N - 1];
-    if (mo >= last.startYm + last.months) return N;
-    for (const seg of segments) {
-      if (mo < seg.startYm + seg.months) return seg.idx + Math.max(0, mo - seg.startYm) / seg.months;
-    }
-    return N;
+  let x = 0;
+  const push = (seg) => { seg.idx = segments.length; seg.x = x; x += seg.w; segments.push(seg); };
+  const yy = (y) => String(y % 100).padStart(2, "0");
+  const coarse = (type, ym, months, parentKey) => {
+    const y = Math.floor(ym / 12), m = ym % 12;
+    const endYm = ym + months;
+    push({
+      type, tier: type, y, m, ym, parentKey, key: `${type}:${ym}`, w: coarseW,
+      a: absDayOf(y, m, 1),
+      days: absDayOf(Math.floor(endYm / 12), endYm % 12, 1) - absDayOf(y, m, 1),
+      label: type === "month" ? (m === 0 ? `JAN ${yy(y)}` : MONTHS_ABBR[m])
+        : type === "quarter" ? `Q${Math.floor(m / 3) + 1} ${yy(y)}`
+        : `${m < 6 ? "H1" : "H2"} ${yy(y)}`,
+    });
+  };
+  const dayCol = (y, m, d, parentKey) => {
+    const dow = new Date(y, m, d).getDay();
+    push({ type: "day", tier: "day", y, m, d, parentKey, w: GANTT_DAY_W, a: absDayOf(y, m, d), days: 1,
+           label: String(d), dow, weekend: dow === 0 || dow === 6, monthStart: d === 1 });
+  };
+  // Emit one column — or, if it has been drilled into, the columns one step finer.
+  const emit = (type, ym, months, parentKey) => {
+    const key = `${type}:${ym}`;
+    if (!drilled.has(key)) { coarse(type, ym, months, parentKey); return; }
+    if (type === "half") { emit("quarter", ym, 3, key); emit("quarter", ym + 3, 3, key); return; }
+    if (type === "quarter") { for (let i = 0; i < 3; i++) emit("month", ym + i, 1, key); return; }
+    const y = Math.floor(ym / 12), m = ym % 12;
+    for (let d = 1; d <= daysInMonth(y, m); d++) dayCol(y, m, d, key);
   };
 
-  // Column index of the current month — the scroll effect centres this on load (clamping to the
-  // left edge when there isn't enough history to fully centre it). Month zone starts at the
-  // previous quarter (3 months), so the current quarter starts +3, and the current month is
-  // +3 + its offset within the quarter.
-  const monthZoneStartIdx = segments.findIndex((s) => s.type === "month");
-  const currentMonthCol = monthZoneStartIdx >= 0 ? monthZoneStartIdx + 3 + (now.getMonth() % 3) : 0;
+  // Past coarse zone — whole quarters back to the earliest item (rare; keeps old items placeable).
+  if (itemMin < monthZoneStart) {
+    for (let q = Math.floor(itemMin / 3) * 3; q < monthZoneStart; q += 3) emit("quarter", q, 3, null);
+  }
+  // Month zone — prev + current + next quarter, as months unless drilled into days.
+  for (let k = monthZoneStart; k <= monthZoneEnd; k++) emit("month", k, 1, null);
+  // Future coarse zone — at least the 2 nearest quarters, extended until a calendar half boundary…
+  let f = monthZoneEnd + 1, qCount = 0, guard = 0;
+  while (!(qCount >= 2 && (f % 12) % 6 === 0) && guard++ < 8) { emit("quarter", f, 3, null); f += 3; qCount++; }
+  // …then calendar half-years (H1/H2), only as far as items actually reach.
+  while (itemMax >= f && guard++ < 40) { emit("half", f, 6, null); f += 6; }
 
-  // Fractional column coordinate for today (year+month+day), used to draw the "today" marker.
-  const todayDay = now.getDate();
-  const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const todayCol = colOfMo(now.getFullYear() * 12 + now.getMonth() + (todayDay - 1) / dim);
+  const totalW = x, N = segments.length;
 
-  return { scheduled, unscheduled, segments, N, colOfMo, currentMonthCol, todayCol };
+  // Pixel offset of a day boundary. Passing day+1 gives the END of that day, which is what puts an
+  // item finishing yesterday exactly on the today marker (= the start of today) instead of past it.
+  const pxOfDay = (abs) => {
+    if (!N || abs <= segments[0].a) return 0;
+    for (const seg of segments) if (abs <= seg.a + seg.days) return seg.x + (seg.w * (abs - seg.a)) / seg.days;
+    return totalW;
+  };
+  const scheduled = dated.map(({ it, s, e }) => ({
+    it,
+    x0: pxOfDay(absDayOf(s.y, s.m, s.d)),
+    x1: pxOfDay(absDayOf(e.y, e.m, e.d) + 1),
+  }));
+
+  const todayAbs = absDayOf(now.getFullYear(), now.getMonth(), now.getDate());
+  const last = segments[N - 1];
+  const todayInRange = N > 0 && todayAbs >= segments[0].a && todayAbs < last.a + last.days;
+  const todayX = pxOfDay(todayAbs);
+  const todayLabel = `${now.getDate()} ${MONTHS_ABBR[now.getMonth()]}`;
+  // Scroll target: the centre of whichever column today lands in — the current month at month
+  // resolution, the current day once that month has been drilled into days.
+  const todaySeg = segments.find((seg) => todayAbs >= seg.a && todayAbs < seg.a + seg.days);
+  const centreX = todaySeg ? todaySeg.x + todaySeg.w / 2 : 0;
+
+  // Band row above the columns, shown once anything has been drilled into. Columns produced by a
+  // drill group under their parent and the band label rolls that drill back up (click "AUG 26" over
+  // a run of day columns to get the month column back). Columns nobody drilled into just show their
+  // natural grouping — quarter for a month, year for a quarter/half — and aren't clickable.
+  const bands = [];
+  segments.forEach((seg) => {
+    let bandKey, label, rollUp = null;
+    if (seg.parentKey) {
+      const [ptype, pym] = seg.parentKey.split(":");
+      const py = Math.floor(Number(pym) / 12), pm = Number(pym) % 12;
+      bandKey = seg.parentKey;
+      rollUp = seg.parentKey;
+      label = ptype === "month" ? `${MONTHS_ABBR[pm]} ${yy(py)}`
+        : ptype === "quarter" ? `Q${Math.floor(pm / 3) + 1} ${yy(py)}`
+        : `${pm < 6 ? "H1" : "H2"} ${yy(py)}`;
+    } else if (seg.type === "month") {
+      bandKey = `q${seg.y}-${Math.floor(seg.m / 3)}`;
+      label = `Q${Math.floor(seg.m / 3) + 1} ${yy(seg.y)}`;
+    } else {
+      bandKey = `y${seg.y}`;
+      label = String(seg.y);
+    }
+    const prev = bands[bands.length - 1];
+    if (prev && prev.bandKey === bandKey) { prev.w += seg.w; return; }
+    bands.push({ bandKey, label, rollUp, x: seg.x, w: seg.w });
+  });
+
+  return { scheduled, unscheduled, segments, bands, totalW, todayX, todayInRange, todayLabel,
+           todayAbs, centreX, showBands: drilled.size > 0 };
 }
 
 // "2026-06-15" -> "15 JUN" (the due-date pill). Null for empty/invalid input.
@@ -775,6 +851,46 @@ export default function RoadmapTracker() {
       return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
     } catch { return []; }
   });
+  // Gantt timeline zoom (see GANTT_ZOOM_KEY). Defaults to the EXPAND preset — the current quarter
+  // drawn day by day. Remembered in localStorage per roadmap.
+  const [ganttZoom, setGanttZoom] = useState(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem(GANTT_ZOOM_KEY));
+      if (p?.mode === "compact" || p?.mode === "expand") return { mode: p.mode };
+      if (p?.mode === "custom" && Array.isArray(p.drilled)) return { mode: "custom", drilled: p.drilled.filter((k) => typeof k === "string") };
+    } catch { /* ignore */ }
+    return GANTT_ZOOM_DEFAULT;
+  });
+  const [ganttCentreTick, setGanttCentreTick] = useState(0); // bumped to re-centre on today
+  const applyGanttZoom = (z, recentre) => {
+    setGanttZoom(z);
+    try { localStorage.setItem(GANTT_ZOOM_KEY, JSON.stringify(z)); } catch { /* ignore */ }
+    if (recentre) setGanttCentreTick((t) => t + 1);
+  };
+  // A per-column click needs an explicit list, so resolve whichever preset is active into one first.
+  const ganttDrilledNow = () => {
+    const cq = today.getFullYear() * 12 + Math.floor(today.getMonth() / 3) * 3;
+    return ganttZoom.mode === "expand" ? [`month:${cq}`, `month:${cq + 1}`, `month:${cq + 2}`]
+      : ganttZoom.mode === "compact" ? []
+      : ganttZoom.drilled || [];
+  };
+  // Drill one step finer: half → quarters, quarter → months, month → days.
+  const drillGanttColumn = (key) => {
+    if (ganttDrilledNow().includes(key)) return;
+    applyGanttZoom({ mode: "custom", drilled: [...ganttDrilledNow(), key] });
+  };
+  // Roll a drill back up, dropping anything nested inside it so re-drilling starts from one step.
+  const rollUpGanttColumn = (key) => {
+    const [type, ymStr] = key.split(":");
+    const ym = Number(ymStr), span = type === "half" ? 6 : type === "quarter" ? 3 : 1;
+    const drilled = ganttDrilledNow().filter((k) => {
+      const [kType, kYm] = k.split(":");
+      const nested = GANTT_TIER_RANK[kType] <= GANTT_TIER_RANK[type] && Number(kYm) >= ym && Number(kYm) < ym + span;
+      return !nested;
+    });
+    // Rolling up the last drill is the compact preset — store it as such so the CTA reads correctly.
+    applyGanttZoom(drilled.length ? { mode: "custom", drilled } : { mode: "compact" });
+  };
   const persistGanttCollapsed = (ids) => {
     setGanttCollapsed(ids);
     try { localStorage.setItem(GANTT_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
@@ -1919,7 +2035,13 @@ export default function RoadmapTracker() {
   // Gantt: variable-resolution timeline layout (months near-term → quarters → half-years).
   // `today` comes from state (not a bare `new Date()` in here) so the today marker follows the
   // real date on a long-lived tab instead of freezing at page-load time.
-  const ganttLayout = useMemo(() => buildGanttLayout(displayData.items, today), [displayData.items, today]);
+  // With nothing drilled into, coarse columns stretch to fill the viewport (the old compact view);
+  // once anything is drilled the chart scrolls anyway, so they take a fixed width instead.
+  const ganttAnyDrilled = ganttZoom.mode === "expand" || (ganttZoom.mode === "custom" && (ganttZoom.drilled || []).length > 0);
+  const ganttLayout = useMemo(
+    () => buildGanttLayout(displayData.items, today, ganttZoom, ganttAnyDrilled ? GANTT_COARSE_W : ganttColW),
+    [displayData.items, today, ganttZoom, ganttAnyDrilled, ganttColW]
+  );
 
   // Keep `today` on the real current day. Background tabs throttle timers heavily, so also
   // re-check when the tab regains focus/visibility — otherwise a tab woken after midnight could
@@ -1951,25 +2073,26 @@ export default function RoadmapTracker() {
     return () => ro.disconnect();
   }, [activeView]);
 
-  // Gantt: on open, centre the current month in the visible timeline area — clamped to the left
-  // edge when there isn't enough history to fully centre it. Scrollable both directions.
+  // Gantt: centre today in the visible timeline area on open, on resize, and when a COMPACT/EXPAND
+  // preset is pressed — but deliberately NOT when a single column is drilled into, since that would
+  // yank the view away from the column just clicked. (Drilling only widens columns to the right of
+  // the click, so leaving the scroll alone keeps the clicked column exactly where it was.)
   useEffect(() => {
     if (activeView !== "gantt") return;
     const el = ganttBodyRef.current;
     if (!el) return;
-    const center = (ganttLayout.currentMonthCol + 0.5) * ganttColW;
-    el.scrollLeft = Math.max(0, center - (el.clientWidth - GANTT_LABEL_W) / 2);
-  }, [activeView, ganttColW, ganttLayout]); // eslint-disable-line react-hooks/exhaustive-deps
+    el.scrollLeft = Math.max(0, ganttLayout.centreX - (el.clientWidth - GANTT_LABEL_W) / 2);
+  }, [activeView, ganttColW, ganttCentreTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gantt: click-and-drag anywhere on the empty timeline to pan left/right (like grabbing a map).
-  // Starting the drag on a bar is ignored so the bar's click-to-open still works.
+  // Starting the drag on a bar or a workstream label is ignored so their clicks still work.
   useEffect(() => {
     if (activeView !== "gantt") return;
     const el = ganttBodyRef.current;
     if (!el) return;
     let active = false, startX = 0, startScroll = 0;
     const down = (e) => {
-      if (e.button !== 0 || e.target.closest("[data-gantt-bar]")) return;
+      if (e.button !== 0 || e.target.closest("[data-gantt-bar]") || e.target.closest("[data-gantt-label]")) return;
       active = true; startX = e.pageX; startScroll = el.scrollLeft;
       el.style.cursor = "grabbing"; el.style.userSelect = "none";
     };
@@ -2678,10 +2801,17 @@ export default function RoadmapTracker() {
 
         {/* ── Gantt view ── */}
         {activeView === "gantt" && (() => {
-          const LABEL = GANTT_LABEL_W, COL = ganttColW;
-          const { scheduled, unscheduled, segments, N, colOfMo, todayCol } = ganttLayout;
-          const todayLeft = todayCol * COL;                 // px offset of the "today" line within the timeline
-          const todayInRange = todayCol > 0 && todayCol < N; // hide it if today falls outside the drawn range
+          const LABEL = GANTT_LABEL_W;
+          const { scheduled, unscheduled, segments, bands, totalW, todayX, todayInRange, todayLabel, todayAbs, showBands } = ganttLayout;
+          const drillTip = { month: "Click to show this month day by day", quarter: "Click to split this quarter into months", half: "Click to split this half-year into quarters" };
+          const todaySeg = segments.find((s) => s.type === "day" && s.a === todayAbs);
+          // Gridline weight carries the hierarchy: faintest between days, a touch stronger on
+          // Mondays, stronger again at month starts, strongest where the resolution changes.
+          const lineAt = (seg, i) => (i > 0 && segments[i - 1].tier !== seg.tier) ? { w: 2, c: "#c4bfba" }
+            : seg.type !== "day" ? { w: 1, c: "#f1f0ef" }
+            : seg.monthStart ? { w: 1, c: "#dcd9d6" }
+            : seg.dow === 1 ? { w: 1, c: "#eceae8" }
+            : { w: 1, c: "#f5f4f3" };
 
           // Pastel bar styling — soft fill + darker text + a colored left accent. Colours still map
           // to status (this mapping is intentionally lighter than the other views' saturated dots).
@@ -2722,20 +2852,53 @@ export default function RoadmapTracker() {
             );
           }
 
-          const gridCols = `repeat(${N}, ${COL}px)`;
           const allLanesCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => ganttCollapsed.includes(t.id));
 
           return (
             <div className="w-full">
-              {/* Legend */}
-              <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs mb-3">
+              {/* Legend + resolution switch */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs mb-3">
                 {[["On Track", "bg-sky-100 border-sky-400"], ["At Risk", "bg-amber-100 border-amber-400"], ["Blocked", "bg-rose-100 border-rose-400"], ["Done", "bg-emerald-100 border-emerald-500"], ["Deprioritised", "bg-stone-100 border-stone-400"]].map(([lbl, cls]) => (
                   <span key={lbl} className="flex items-center gap-1.5"><span className={`w-4 h-3.5 rounded-sm border-l-4 ${cls}`} />{lbl}</span>
                 ))}
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400 mr-0.5">Timeline</span>
+                  {[["compact", "Compact", "Collapse everything back to whole months"], ["expand", "Expand", "Show the current quarter day by day"]].map(([m, lbl, tip]) => (
+                    <button key={m} onClick={() => applyGanttZoom({ mode: m }, true)} title={tip} aria-pressed={ganttZoom.mode === m}
+                      className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-md border transition-colors ${
+                        ganttZoom.mode === m ? "bg-stone-800 border-stone-800 text-white" : "bg-white border-stone-200 text-stone-500 hover:border-stone-400"}`}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Pinned header — single row of variable-resolution columns (syncs with the body) */}
+              {/* Pinned header — coarse band (EXPANDED only) over the fine columns; syncs with the body */}
               <div ref={ganttHeaderRef} className="sticky top-0 z-30 overflow-hidden border border-b-0 border-stone-200 rounded-t-xl bg-white">
+                {showBands && (
+                  <div className="flex border-b border-stone-200">
+                    <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center px-4" style={{ width: LABEL, height: 26 }}>
+                      <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-stone-400">Timeline</span>
+                    </div>
+                    <div className="relative flex-shrink-0" style={{ width: totalW, height: 26 }}>
+                      {bands.map((b) => b.rollUp ? (
+                        <button key={b.bandKey} onClick={() => rollUpGanttColumn(b.rollUp)} title="Click to collapse this back"
+                          className="absolute top-0 flex items-center justify-center gap-1 text-[9px] font-mono font-bold uppercase tracking-widest border-r border-stone-200 text-stone-600 bg-white hover:bg-stone-100 hover:text-stone-900 transition-colors overflow-hidden"
+                          style={{ left: b.x, width: b.w, height: 26 }}>
+                          <ChevronDown className="w-3 h-3 flex-shrink-0 rotate-180 opacity-50" />{b.label}
+                        </button>
+                      ) : (
+                        <div key={b.bandKey}
+                          className="absolute top-0 flex items-center justify-center text-[9px] font-mono font-bold uppercase tracking-widest border-r border-stone-200 text-stone-400 bg-stone-50 overflow-hidden"
+                          style={{ left: b.x, width: b.w, height: 26 }}>{b.label}</div>
+                      ))}
+                      {todayInRange && (
+                        <span className="absolute z-10 top-1 -translate-x-1/2 text-[8px] font-mono font-bold uppercase tracking-wider text-white bg-red-500 rounded-full px-2 py-px whitespace-nowrap pointer-events-none"
+                          style={{ left: todayX }}>Today · {todayLabel}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="flex">
                   <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center gap-2 px-4" style={{ width: LABEL, height: 36 }}>
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">Workstream</span>
@@ -2746,16 +2909,29 @@ export default function RoadmapTracker() {
                       {allLanesCollapsed ? "Expand all" : "Collapse all"}
                     </button>
                   </div>
-                  <div className="relative" style={{ display: "grid", gridTemplateColumns: gridCols }}>
-                    {segments.map((seg) => (
-                      <div key={seg.idx}
-                        className={`flex items-center justify-center text-[10px] font-mono font-semibold uppercase tracking-wider border-r border-stone-200 ${seg.type === "month" ? "text-stone-500 bg-white" : "text-stone-400 bg-stone-50"}`}
-                        style={{ height: 36 }}>{seg.label}</div>
-                    ))}
-                    {todayInRange && (
-                      <div className="absolute top-0 bottom-0 z-10 pointer-events-none flex items-start" style={{ left: todayLeft }}>
-                        <span className="-translate-x-1/2 mt-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-white bg-red-500 rounded px-1 py-px whitespace-nowrap">Today</span>
-                      </div>
+                  <div className="relative flex-shrink-0" style={{ width: totalW, height: 36 }}>
+                    {segments.map((seg) => {
+                      const isToday = seg.type === "day" && seg.a === todayAbs;
+                      return seg.type === "day" ? (
+                        <div key={seg.idx}
+                          className={`absolute top-0 flex flex-col items-center justify-center gap-px border-r ${seg.weekend ? "bg-stone-50 border-stone-200" : "border-stone-100"}`}
+                          style={{ left: seg.x, width: seg.w, height: 36 }}>
+                          <span className={`text-[10px] font-mono leading-none ${isToday
+                            ? "bg-red-500 text-white font-bold rounded-full w-[17px] h-[17px] flex items-center justify-center"
+                            : seg.weekend ? "text-stone-400" : "text-stone-600"}`}>{seg.label}</span>
+                          <span className={`text-[8px] font-mono leading-none ${isToday ? "text-red-500 font-bold" : "text-stone-400"}`}>{DOW_ABBR[seg.dow]}</span>
+                        </div>
+                      ) : (
+                        // Coarse columns drill one step finer when clicked.
+                        <button key={seg.idx} onClick={() => drillGanttColumn(seg.key)} title={drillTip[seg.type]}
+                          className={`absolute top-0 flex items-center justify-center text-[10px] font-mono font-semibold uppercase tracking-wider border-r border-stone-200 transition-colors ${
+                            seg.type === "month" ? "text-stone-500 bg-white hover:bg-stone-100 hover:text-stone-900" : "text-stone-400 bg-stone-50 hover:bg-stone-100 hover:text-stone-700"}`}
+                          style={{ left: seg.x, width: seg.w, height: 36 }}>{seg.label}</button>
+                      );
+                    })}
+                    {!showBands && todayInRange && (
+                      <span className="absolute z-10 top-0.5 -translate-x-1/2 text-[8px] font-mono font-bold uppercase tracking-wider text-white bg-red-500 rounded-full px-2 py-px whitespace-nowrap pointer-events-none"
+                        style={{ left: todayX }}>Today · {todayLabel}</span>
                     )}
                   </div>
                 </div>
@@ -2765,18 +2941,35 @@ export default function RoadmapTracker() {
               <div ref={ganttBodyRef}
                 onScroll={(e) => { if (ganttHeaderRef.current) ganttHeaderRef.current.scrollLeft = e.currentTarget.scrollLeft; }}
                 className="overflow-x-auto border border-stone-200 rounded-b-xl bg-white">
+                <div className="relative" style={{ width: LABEL + totalW }}>
+                {/* Column background — weekend wash, gridlines and the today wash, drawn once behind
+                    every lane so the lines run continuously down the whole chart. */}
+                <div className="absolute inset-y-0 pointer-events-none" style={{ left: LABEL, width: totalW }}>
+                  {segments.filter((s) => s.weekend).map((s) => (
+                    <div key={`w${s.idx}`} className="absolute inset-y-0" style={{ left: s.x, width: s.w, background: "#f7f6f5" }} />
+                  ))}
+                  {todaySeg && (
+                    <div className="absolute inset-y-0" style={{ left: todaySeg.x, width: todaySeg.w, background: "rgba(239,68,68,0.045)" }} />
+                  )}
+                  {segments.map((seg, i) => (i === 0 ? null : (
+                    <div key={`g${seg.idx}`} className="absolute inset-y-0"
+                      style={{ left: seg.x, width: lineAt(seg, i).w, background: lineAt(seg, i).c }} />
+                  )))}
+                </div>
                 {displayData.teams.map((team) => {
                   const teamRows = scheduled.filter((x) => x.it.teamId === team.id);
                   const { main, code } = parseWorkstreamName(team.name);
                   const collapsed = ganttCollapsed.includes(team.id);
                   // Collapsed lane: one muted band spanning the workstream's overall date range,
                   // so the row still shows *when* the work sits without listing every item.
-                  const bandLeft = collapsed && teamRows.length > 0 ? Math.min(...teamRows.map((r) => colOfMo(r.startMo))) * COL : 0;
-                  const bandRight = collapsed && teamRows.length > 0 ? Math.max(...teamRows.map((r) => colOfMo(r.endMo))) * COL : 0;
+                  const bandLeft = collapsed && teamRows.length > 0 ? Math.min(...teamRows.map((r) => r.x0)) : 0;
+                  const bandRight = collapsed && teamRows.length > 0 ? Math.max(...teamRows.map((r) => r.x1)) : 0;
+                  const bandW = Math.max(GANTT_MIN_BAR, bandRight - bandLeft - 4);   // same inset + min-width
+                  const bandX = Math.min(bandLeft + 2, bandRight - 2 - bandW);       // rule as the bars above
                   return (
-                    <div key={team.id} className="flex border-b border-stone-200 last:border-b-0" style={{ width: LABEL + N * COL }}>
+                    <div key={team.id} className="flex border-b border-stone-200 last:border-b-0" style={{ width: LABEL + totalW }}>
                       {/* Whole label cell is the collapse/expand hit area (not just the text) */}
-                      <button onClick={() => toggleGanttCollapse(team.id)} title={collapsed ? "Expand this workstream" : "Collapse this workstream"}
+                      <button data-gantt-label onClick={() => toggleGanttCollapse(team.id)} title={collapsed ? "Expand this workstream" : "Collapse this workstream"}
                         className="group sticky left-0 z-20 bg-white hover:bg-stone-50 border-r border-stone-200 flex-shrink-0 flex flex-col justify-center px-3 py-3 text-left transition-colors" style={{ width: LABEL }}>
                         <span className="flex items-start gap-1.5">
                           <ChevronDown className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-stone-400 group-hover:text-stone-800 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
@@ -2791,24 +2984,27 @@ export default function RoadmapTracker() {
                           </span>
                         </span>
                       </button>
-                      <div className="relative flex-shrink-0 py-2 cursor-grab" style={{ width: N * COL, backgroundImage: `repeating-linear-gradient(to right, transparent 0, transparent ${COL - 1}px, #f1f0ef ${COL - 1}px, #f1f0ef ${COL}px)` }}>
+                      <div className="relative flex-shrink-0 py-2 cursor-grab" style={{ width: totalW }}>
                         {collapsed ? (
                           <div className="relative" style={{ height: 22 }}>
                             {teamRows.length > 0 && (
                               <div className="absolute rounded bg-stone-200 border-l-4 border-stone-400"
-                                style={{ top: 5, left: bandLeft + 2, width: Math.max(10, bandRight - bandLeft - 4), height: 12 }} />
+                                style={{ top: 5, left: bandX, width: bandW, height: 12 }} />
                             )}
                           </div>
                         ) : teamRows.length === 0 ? (
                           <div style={{ height: 22 }} />
-                        ) : teamRows.map(({ it, startMo, endMo }) => {
+                        ) : teamRows.map(({ it, x0, x1 }) => {
                           const { cleanText } = getItemDisplay(it);
-                          const left = colOfMo(startMo) * COL;
-                          const width = (colOfMo(endMo) - colOfMo(startMo)) * COL;
+                          // Bars are inset 2px each side. A bar too short to meet the minimum width
+                          // grows *leftward* (Math.min) so its right edge always stays on the real
+                          // end date — a one-day item can't spill past the today marker.
+                          const width = Math.max(GANTT_MIN_BAR, x1 - x0 - 4);
+                          const left = Math.min(x0 + 2, x1 - 2 - width);
                           return (
                             <div key={it.id} className="relative" style={{ height: 34 }}>
                               <div data-gantt-bar onClick={() => setExpandedItem(it.id)} title={cleanText}
-                                style={{ position: "absolute", top: 4, left: left + 2, width: Math.max(10, width - 4) }}
+                                style={{ position: "absolute", top: 4, left, width }}
                                 className={`h-[26px] rounded-md border-l-4 flex items-center gap-1.5 px-2 text-[11px] font-medium overflow-hidden whitespace-nowrap cursor-pointer hover:brightness-[0.97] transition ${barCls(it.flag)}`}>
                                 <span className="truncate flex-1">{cleanText}</span>
                                 {it.tag && <span className="flex-shrink-0 text-[9px] font-mono uppercase tracking-wide text-stone-400/90">{it.tag}</span>}
@@ -2816,12 +3012,15 @@ export default function RoadmapTracker() {
                             </div>
                           );
                         })}
-                        {/* Today marker — thin vertical red line across the row */}
-                        {todayInRange && <div className="absolute top-0 bottom-0 z-10 bg-red-500 pointer-events-none" style={{ left: todayLeft, width: 2 }} />}
                       </div>
                     </div>
                   );
                 })}
+                {/* Today marker — one continuous red line over the bars, under the sticky labels */}
+                {todayInRange && (
+                  <div className="absolute inset-y-0 z-10 bg-red-500 pointer-events-none" style={{ left: LABEL + todayX, width: 2 }} />
+                )}
+                </div>
               </div>
 
               <UnscheduledStrip />
@@ -2829,6 +3028,7 @@ export default function RoadmapTracker() {
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any bar to open the item · <span className="font-bold">drag</span> the timeline to scroll · the red line marks today</span>}
                 <span><span className="font-bold">Click</span> a workstream name to collapse or expand its lane</span>
+                <span><span className="font-bold">Click a month</span> in the header to show its days · click the name above them to collapse it back · <span className="font-bold">Compact</span> resets everything</span>
                 <span className="ml-auto opacity-40">{APP_VERSION}</span>
               </div>
             </div>
