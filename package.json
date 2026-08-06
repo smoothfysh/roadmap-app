@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "npm run build && gh-pages -d dist",
+    "build:company": "vite build --base=./ && node scripts/strip-cname.mjs",
+    "deploy:company": "npm run build:company && gh-pages -d dist -r https://github.com/axel-springer-kugawana/roadmap.git"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.2",
