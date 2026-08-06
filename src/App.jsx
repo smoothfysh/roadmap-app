@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info } from "lucide-react";
 import { version } from "../package.json";
 import { supabase, cloudEnabled } from "./supabaseClient";
 import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
@@ -39,12 +39,15 @@ const CLOUD_KEY = (() => {
 // cache and never overwrites the default local roadmap (STORAGE_KEY = "roadmap-data").
 const cloudStorageKey = (id) => `roadmap-cloud-${id}`;
 
-// Gantt view preferences — which lanes are collapsed, and compact vs expanded resolution. These
-// are local-only UI state (never part of the roadmap data, so never shared, exported or synced),
-// keyed per roadmap so a scoped or cloud copy keeps its own.
-const GANTT_PREF_SCOPE = CLOUD_ID ? `cloud-${CLOUD_ID}` : SCOPE_NAME || "default";
-const GANTT_COLLAPSE_KEY = `roadmap-gantt-collapsed-${GANTT_PREF_SCOPE}`;
-const GANTT_ZOOM_KEY = `roadmap-gantt-zoom-${GANTT_PREF_SCOPE}`;
+// View preferences — which lanes/teams are collapsed, and the Gantt's compact vs expanded
+// resolution. These are local-only UI state (never part of the roadmap data, so never shared,
+// exported or synced), keyed per roadmap so a scoped or cloud copy keeps its own.
+const VIEW_PREF_SCOPE = CLOUD_ID ? `cloud-${CLOUD_ID}` : SCOPE_NAME || "default";
+const GANTT_COLLAPSE_KEY = `roadmap-gantt-collapsed-${VIEW_PREF_SCOPE}`;
+const GANTT_ZOOM_KEY = `roadmap-gantt-zoom-${VIEW_PREF_SCOPE}`;
+// "BY TIME" board: which team rows are collapsed. Separate from the Gantt's lane collapse so the
+// two views can be arranged independently.
+const BOARD_COLLAPSE_KEY = `roadmap-board-collapsed-${VIEW_PREF_SCOPE}`;
 
 // Gantt timeline zoom. The COMPACT / EXPAND buttons are presets; clicking an individual column
 // switches to "custom" and edits an explicit list of drilled-into columns.
@@ -851,6 +854,14 @@ export default function RoadmapTracker() {
       return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
     } catch { return []; }
   });
+  // "BY TIME" board: ids of collapsed team rows. Empty = every team expanded (the default).
+  // Persisted to localStorage only — a view preference, not roadmap data.
+  const [boardCollapsed, setBoardCollapsed] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(BOARD_COLLAPSE_KEY));
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    } catch { return []; }
+  });
   // Gantt timeline zoom (see GANTT_ZOOM_KEY). Defaults to the EXPAND preset — the current quarter
   // drawn day by day. Remembered in localStorage per roadmap.
   const [ganttZoom, setGanttZoom] = useState(() => {
@@ -898,6 +909,19 @@ export default function RoadmapTracker() {
   const toggleGanttCollapse = (teamId) => persistGanttCollapsed(
     ganttCollapsed.includes(teamId) ? ganttCollapsed.filter((x) => x !== teamId) : [...ganttCollapsed, teamId]
   );
+  const persistBoardCollapsed = (ids) => {
+    setBoardCollapsed(ids);
+    try { localStorage.setItem(BOARD_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
+  };
+  // Collapsing a team hides its items in *every* column — team rows span the whole board.
+  const toggleBoardCollapse = (teamId) => persistBoardCollapsed(
+    boardCollapsed.includes(teamId) ? boardCollapsed.filter((x) => x !== teamId) : [...boardCollapsed, teamId]
+  );
+  // Used when an action would otherwise land somewhere invisible (adding to, or dropping on, a
+  // collapsed team) — reveal the row so the result is actually seen.
+  const expandBoardTeam = (teamId) => {
+    if (boardCollapsed.includes(teamId)) persistBoardCollapsed(boardCollapsed.filter((x) => x !== teamId));
+  };
   const [modalTab, setModalTab] = useState("details"); // "details" | "outcome"
   const initialModalTabRef = useRef("details"); // tab to land on when the modal next opens (reset after use)
   const teamDetailDraftRef = useRef(null); // textarea holding the roster while editing in the team modal
@@ -1802,25 +1826,41 @@ export default function RoadmapTracker() {
     const isDragOverSection = dragOverSection === sectionKey;
     const isAdding = !isPreview && addingTo?.columnId === col.id && addingTo?.teamId === team.id;
     const isFirstColumn = col.id === displayData.columns[0].id;
+    // Collapsed teams keep their header (the only way back) but hide items and the add form.
+    // An in-progress add wins, so "+" on a collapsed row can't open a form you can't see.
+    const isCollapsed = boardCollapsed.includes(team.id) && !isAdding;
+    const devsSummary = getDevsSummary(team.detail);
 
     return (
       <div
         key={team.id}
         className={`rounded-md transition-colors ${isDragOverSection ? "ring-2 ring-stone-800" : ""}`}
         onDragOver={!isPreview ? (e) => handleDragOverSection(e, col.id, team.id) : undefined}
-        onDrop={!isPreview ? (e) => handleDropOnSection(e, col.id, team.id) : undefined}
+        onDrop={!isPreview ? (e) => { expandBoardTeam(team.id); handleDropOnSection(e, col.id, team.id); } : undefined}
       >
         {/* Team Header */}
-        <div className={`${styles.section} rounded-md mb-2 relative group min-h-[32px]`}>
+        <div className={`${styles.section} rounded-md ${isCollapsed ? "" : "mb-2"} relative group min-h-[32px]`}>
+          {/* Team name — click to collapse / expand this team across every column */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setTeamDetailEditing(false); setTeamModalId(team.id); }}
-            title={isPreview ? "View team details" : "View & edit team details"}
-            className="w-full px-8 py-1.5 m-0 flex flex-col items-center justify-center min-h-[32px] bg-transparent cursor-pointer group/team"
+            onClick={(e) => { e.stopPropagation(); toggleBoardCollapse(team.id); }}
+            title={isCollapsed ? `Expand ${team.name}` : `Collapse ${team.name}`}
+            className="w-full px-14 py-1.5 m-0 flex items-center justify-center gap-1.5 min-h-[32px] bg-transparent cursor-pointer group/team"
           >
-            <span className="text-xs font-bold tracking-wide text-stone-900 text-center group-hover/team:underline decoration-dotted underline-offset-2">{team.name}</span>
-            {getDevsSummary(team.detail) && (
-              <span className="text-[11px] font-semibold text-stone-600 mt-0.5">{getDevsSummary(team.detail)}</span>
+            <ChevronDown
+              className={`w-3 h-3 flex-shrink-0 text-stone-500 group-hover/team:text-stone-900 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+            />
+            <span className="flex flex-col items-center min-w-0">
+              <span className="text-xs font-bold tracking-wide text-stone-900 text-center group-hover/team:underline decoration-dotted underline-offset-2">{team.name}</span>
+              {!isCollapsed && devsSummary && (
+                <span className="text-[11px] font-semibold text-stone-600 mt-0.5">{devsSummary}</span>
+              )}
+            </span>
+            {/* Hidden-item count, so a collapsed row isn't opaque */}
+            {isCollapsed && teamItems.length > 0 && (
+              <span className="flex-shrink-0 font-mono text-[10px] font-semibold text-stone-600 bg-white/60 border border-stone-400/50 rounded px-1 py-px">
+                {teamItems.length}
+              </span>
             )}
           </button>
           {/* Delete team button — only in first column, not in preview */}
@@ -1833,20 +1873,31 @@ export default function RoadmapTracker() {
               <Trash2 className="w-3 h-3" />
             </button>
           )}
-          {/* Add item button */}
-          {!isPreview && (
+          {/* Right-hand actions: team details, then add item */}
+          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+            {/* Team details — the modal the team name used to open. Always shown (incl. preview),
+                since it's now the only way in. */}
             <button
-              onClick={(e) => { e.stopPropagation(); setAddingTo({ columnId: col.id, teamId: team.id }); }}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-900 hover:bg-white/50 rounded w-5 h-5 flex items-center justify-center transition-colors"
-              title="Add item"
+              onClick={(e) => { e.stopPropagation(); setTeamDetailEditing(false); setTeamModalId(team.id); }}
+              className="text-stone-500 hover:text-stone-900 hover:bg-white/50 rounded w-5 h-5 flex items-center justify-center transition-colors"
+              title={isPreview ? "Team details" : "Team details — roster, notes & outcome"}
             >
-              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+              <Info className="w-3.5 h-3.5" strokeWidth={2.25} />
             </button>
-          )}
+            {!isPreview && (
+              <button
+                onClick={(e) => { e.stopPropagation(); expandBoardTeam(team.id); setAddingTo({ columnId: col.id, teamId: team.id }); }}
+                className="text-stone-600 hover:text-stone-900 hover:bg-white/50 rounded w-5 h-5 flex items-center justify-center transition-colors"
+                title="Add item"
+              >
+                <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Team Items */}
-        <div className="space-y-1.5">
+        <div className={`space-y-1.5 ${isCollapsed ? "hidden" : ""}`}>
           {teamItems.map((item) => {
             const isDragOver = dragOverId === item.id;
             const flagClass = flagStyles[item.flag] || "";
@@ -2475,39 +2526,60 @@ export default function RoadmapTracker() {
           })}
         </div>
 
-        {/* Add Team + Quarter Summary buttons */}
-        {(!isPreview || (displayData.summary || "").trim()) && (
-          <div className="max-w-[1800px] mx-auto mt-4 flex justify-center gap-2.5 flex-wrap">
-            {!isPreview && (
-              <button
-                onClick={addTeam}
-                className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-600 hover:text-stone-900 uppercase border border-dashed border-stone-400 hover:border-stone-700 hover:bg-white px-4 py-2 rounded transition-colors"
-                title="Add a new team row (will appear in every column)"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Team Row
-              </button>
-            )}
-            <button
-              onClick={openSummary}
-              className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 hover:text-violet-900 hover:border-violet-400 px-4 py-2 rounded transition-colors"
-              title="Quarter summary — what was achieved and what's next"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Quarter Summary
-            </button>
-          </div>
-        )}
+        {/* Add Team + Collapse all + Quarter Summary buttons */}
+        {(() => {
+          const allTeamsCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => boardCollapsed.includes(t.id));
+          const showSummary = !isPreview || (displayData.summary || "").trim();
+          if (isPreview && !showSummary && displayData.teams.length === 0) return null;
+          return (
+            <div className="max-w-[1800px] mx-auto mt-4 flex justify-center gap-2.5 flex-wrap">
+              {!isPreview && (
+                <button
+                  onClick={addTeam}
+                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider text-stone-600 hover:text-stone-900 uppercase border border-dashed border-stone-400 hover:border-stone-700 hover:bg-white px-4 py-2 rounded transition-colors"
+                  title="Add a new team row (will appear in every column)"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Team Row
+                </button>
+              )}
+              {displayData.teams.length > 0 && (
+                <button
+                  onClick={() => persistBoardCollapsed(allTeamsCollapsed ? [] : displayData.teams.map((t) => t.id))}
+                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
+                  title={allTeamsCollapsed ? "Expand every team row" : "Collapse every team row"}
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${allTeamsCollapsed ? "-rotate-90" : ""}`} />
+                  {allTeamsCollapsed ? "Expand all" : "Collapse all"}
+                </button>
+              )}
+              {showSummary && (
+                <button
+                  onClick={openSummary}
+                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 hover:text-violet-900 hover:border-violet-400 px-4 py-2 rounded transition-colors"
+                  title="Quarter summary — what was achieved and what's next"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Quarter Summary
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Footer help */}
         <div className="max-w-[1800px] mx-auto mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
           {isPreview ? (
-            <span>This is a read-only shared view — use <span className="font-bold">Save &amp; open</span> in the banner above to make your own editable copy</span>
+            <>
+              <span>This is a read-only shared view — use <span className="font-bold">Save &amp; open</span> in the banner above to make your own editable copy</span>
+              <span><span className="font-bold">Click</span> a team name to collapse it · the <span className="font-bold">ⓘ</span> icon for that team's details</span>
+            </>
           ) : (
             <>
               <span><span className="font-bold">Click</span> any item to expand · edit title, notes, JIRA &amp; Confluence links</span>
               <span><span className="font-bold">Drag</span> any item to reorder or move between columns</span>
-              <span><span className="font-bold">Click</span> team name or quarter label to rename · status dot to cycle flag</span>
+              <span><span className="font-bold">Click</span> a team name to collapse / expand it · the <span className="font-bold">ⓘ</span> icon for team details &amp; rename</span>
+              <span><span className="font-bold">Click</span> a quarter label to rename · status dot to cycle flag</span>
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}

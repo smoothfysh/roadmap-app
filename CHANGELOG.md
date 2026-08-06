@@ -7,6 +7,23 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.19.0 — 2026-08-06
+
+- **"BY TIME": clicking a team name now collapses that team** instead of opening the details modal.
+  - Click toggles collapse ⇄ expand. A chevron on the left shows the state, and a collapsed row
+    shows a count of the items hidden in that column.
+  - Collapsing applies to the whole team row — all four columns at once — and works in both the
+    Compact and aligned layouts.
+  - Remembered in `localStorage` per roadmap (`roadmap-board-collapsed-<scope>`), like the Gantt's
+    lane collapse. It's a view preference only — never shared, exported or synced.
+- **Team details moved to an ⓘ icon** next to the `+` in each team header. Always visible, including
+  in read-only shared views, since it's now the only route to the modal (roster, notes, outcome and
+  the team rename).
+- **"Collapse all" / "Expand all"** button added below the board, beside *Add Team Row*.
+- Clicking `+` on a collapsed team, or dropping an item onto one, now expands it first so the result
+  isn't hidden.
+- Footer help text updated to describe the new team-name and ⓘ behaviour.
+
 ## 4.18.0 — 2026-08-05
 
 - **Gantt: the timeline now zooms.** Days can be shown per month, and any column can be drilled into.
