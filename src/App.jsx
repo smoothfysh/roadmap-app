@@ -43,11 +43,40 @@ const cloudStorageKey = (id) => `roadmap-cloud-${id}`;
 // resolution. These are local-only UI state (never part of the roadmap data, so never shared,
 // exported or synced), keyed per roadmap so a scoped or cloud copy keeps its own.
 const VIEW_PREF_SCOPE = CLOUD_ID ? `cloud-${CLOUD_ID}` : SCOPE_NAME || "default";
-const GANTT_COLLAPSE_KEY = `roadmap-gantt-collapsed-${VIEW_PREF_SCOPE}`;
 const GANTT_ZOOM_KEY = `roadmap-gantt-zoom-${VIEW_PREF_SCOPE}`;
-// "BY TIME" board: which team rows are collapsed. Separate from the Gantt's lane collapse so the
-// two views can be arranged independently.
-const BOARD_COLLAPSE_KEY = `roadmap-board-collapsed-${VIEW_PREF_SCOPE}`;
+
+// ---------- Collapsed teams (shared by every view) ----------
+// One set of collapsed team ids, honoured by BY TIME, BY INNOVATION TYPE, BY IMPACT and the Gantt.
+// Collapse a team anywhere and it's collapsed everywhere.
+const TEAMS_COLLAPSE_KEY = `roadmap-teams-collapsed-${VIEW_PREF_SCOPE}`;
+// Superseded per-view keys, read once to migrate then removed. Kept only for that migration —
+// nothing writes to these any more.
+const LEGACY_COLLAPSE_KEYS = [
+  `roadmap-gantt-collapsed-${VIEW_PREF_SCOPE}`,
+  `roadmap-board-collapsed-${VIEW_PREF_SCOPE}`,
+  `roadmap-strategic-collapsed-${VIEW_PREF_SCOPE}`,
+  `roadmap-impact-collapsed-${VIEW_PREF_SCOPE}`,
+];
+
+const readCollapsedIds = (key) => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch { return []; }
+};
+
+// Initial shared set. Once the unified key exists it's the only source. Before that, seed from the
+// union of the old per-view keys — a team collapsed in any view stays collapsed, so no deliberate
+// arrangement is silently dropped — then clear the old keys so this runs exactly once.
+const initialCollapsedTeams = () => {
+  try {
+    if (localStorage.getItem(TEAMS_COLLAPSE_KEY) !== null) return readCollapsedIds(TEAMS_COLLAPSE_KEY);
+    const merged = [...new Set(LEGACY_COLLAPSE_KEYS.flatMap(readCollapsedIds))];
+    localStorage.setItem(TEAMS_COLLAPSE_KEY, JSON.stringify(merged));
+    LEGACY_COLLAPSE_KEYS.forEach((k) => localStorage.removeItem(k));
+    return merged;
+  } catch { return []; }
+};
 
 // Gantt timeline zoom. The COMPACT / EXPAND buttons are presets; clicking an individual column
 // switches to "custom" and edits an explicit list of drilled-into columns.
@@ -846,22 +875,10 @@ export default function RoadmapTracker() {
   // tab that stays open (e.g. a roadmap left up on a screen). Identity only changes on a new day,
   // so nothing downstream recomputes in between.
   const [today, setToday] = useState(() => new Date());
-  // Gantt: ids of collapsed workstream lanes. Empty = every lane expanded (the default).
-  // Persisted to localStorage only — it's a view preference, not roadmap data.
-  const [ganttCollapsed, setGanttCollapsed] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(GANTT_COLLAPSE_KEY));
-      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-    } catch { return []; }
-  });
-  // "BY TIME" board: ids of collapsed team rows. Empty = every team expanded (the default).
-  // Persisted to localStorage only — a view preference, not roadmap data.
-  const [boardCollapsed, setBoardCollapsed] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(BOARD_COLLAPSE_KEY));
-      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-    } catch { return []; }
-  });
+  // Ids of collapsed teams, shared by every view (see TEAMS_COLLAPSE_KEY). Empty = all expanded.
+  // Persisted to localStorage only — it's a view preference, not roadmap data, so it's never
+  // shared, exported or synced.
+  const [collapsedTeams, setCollapsedTeams] = useState(initialCollapsedTeams);
   // Gantt timeline zoom (see GANTT_ZOOM_KEY). Defaults to the EXPAND preset — the current quarter
   // drawn day by day. Remembered in localStorage per roadmap.
   const [ganttZoom, setGanttZoom] = useState(() => {
@@ -902,25 +919,20 @@ export default function RoadmapTracker() {
     // Rolling up the last drill is the compact preset — store it as such so the CTA reads correctly.
     applyGanttZoom(drilled.length ? { mode: "custom", drilled } : { mode: "compact" });
   };
-  const persistGanttCollapsed = (ids) => {
-    setGanttCollapsed(ids);
-    try { localStorage.setItem(GANTT_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
+  // The single collapse control every view goes through. Collapsing a team in one view collapses it
+  // in all of them: in BY TIME it hides that row's items in every column, in BY INNOVATION TYPE and
+  // BY IMPACT it folds the swim lane, and in the Gantt it bands the workstream.
+  const persistCollapsedTeams = (ids) => {
+    setCollapsedTeams(ids);
+    try { localStorage.setItem(TEAMS_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
   };
-  const toggleGanttCollapse = (teamId) => persistGanttCollapsed(
-    ganttCollapsed.includes(teamId) ? ganttCollapsed.filter((x) => x !== teamId) : [...ganttCollapsed, teamId]
-  );
-  const persistBoardCollapsed = (ids) => {
-    setBoardCollapsed(ids);
-    try { localStorage.setItem(BOARD_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
-  };
-  // Collapsing a team hides its items in *every* column — team rows span the whole board.
-  const toggleBoardCollapse = (teamId) => persistBoardCollapsed(
-    boardCollapsed.includes(teamId) ? boardCollapsed.filter((x) => x !== teamId) : [...boardCollapsed, teamId]
+  const toggleTeamCollapse = (teamId) => persistCollapsedTeams(
+    collapsedTeams.includes(teamId) ? collapsedTeams.filter((x) => x !== teamId) : [...collapsedTeams, teamId]
   );
   // Used when an action would otherwise land somewhere invisible (adding to, or dropping on, a
-  // collapsed team) — reveal the row so the result is actually seen.
-  const expandBoardTeam = (teamId) => {
-    if (boardCollapsed.includes(teamId)) persistBoardCollapsed(boardCollapsed.filter((x) => x !== teamId));
+  // collapsed team) — reveal it so the result is actually seen.
+  const expandTeam = (teamId) => {
+    if (collapsedTeams.includes(teamId)) persistCollapsedTeams(collapsedTeams.filter((x) => x !== teamId));
   };
   const [modalTab, setModalTab] = useState("details"); // "details" | "outcome"
   const initialModalTabRef = useRef("details"); // tab to land on when the modal next opens (reset after use)
@@ -1828,7 +1840,7 @@ export default function RoadmapTracker() {
     const isFirstColumn = col.id === displayData.columns[0].id;
     // Collapsed teams keep their header (the only way back) but hide items and the add form.
     // An in-progress add wins, so "+" on a collapsed row can't open a form you can't see.
-    const isCollapsed = boardCollapsed.includes(team.id) && !isAdding;
+    const isCollapsed = collapsedTeams.includes(team.id) && !isAdding;
     const devsSummary = getDevsSummary(team.detail);
 
     return (
@@ -1836,14 +1848,14 @@ export default function RoadmapTracker() {
         key={team.id}
         className={`rounded-md transition-colors ${isDragOverSection ? "ring-2 ring-stone-800" : ""}`}
         onDragOver={!isPreview ? (e) => handleDragOverSection(e, col.id, team.id) : undefined}
-        onDrop={!isPreview ? (e) => { expandBoardTeam(team.id); handleDropOnSection(e, col.id, team.id); } : undefined}
+        onDrop={!isPreview ? (e) => { expandTeam(team.id); handleDropOnSection(e, col.id, team.id); } : undefined}
       >
         {/* Team Header */}
         <div className={`${styles.section} rounded-md ${isCollapsed ? "" : "mb-2"} relative group min-h-[32px]`}>
           {/* Team name — click to collapse / expand this team across every column */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); toggleBoardCollapse(team.id); }}
+            onClick={(e) => { e.stopPropagation(); toggleTeamCollapse(team.id); }}
             title={isCollapsed ? `Expand ${team.name}` : `Collapse ${team.name}`}
             className="w-full px-14 py-1.5 m-0 flex items-center justify-center gap-1.5 min-h-[32px] bg-transparent cursor-pointer group/team"
           >
@@ -1886,7 +1898,7 @@ export default function RoadmapTracker() {
             </button>
             {!isPreview && (
               <button
-                onClick={(e) => { e.stopPropagation(); expandBoardTeam(team.id); setAddingTo({ columnId: col.id, teamId: team.id }); }}
+                onClick={(e) => { e.stopPropagation(); expandTeam(team.id); setAddingTo({ columnId: col.id, teamId: team.id }); }}
                 className="text-stone-600 hover:text-stone-900 hover:bg-white/50 rounded w-5 h-5 flex items-center justify-center transition-colors"
                 title="Add item"
               >
@@ -2528,7 +2540,7 @@ export default function RoadmapTracker() {
 
         {/* Add Team + Collapse all + Quarter Summary buttons */}
         {(() => {
-          const allTeamsCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => boardCollapsed.includes(t.id));
+          const allTeamsCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => collapsedTeams.includes(t.id));
           const showSummary = !isPreview || (displayData.summary || "").trim();
           if (isPreview && !showSummary && displayData.teams.length === 0) return null;
           return (
@@ -2545,7 +2557,7 @@ export default function RoadmapTracker() {
               )}
               {displayData.teams.length > 0 && (
                 <button
-                  onClick={() => persistBoardCollapsed(allTeamsCollapsed ? [] : displayData.teams.map((t) => t.id))}
+                  onClick={() => persistCollapsedTeams(allTeamsCollapsed ? [] : displayData.teams.map((t) => t.id))}
                   className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
                   title={allTeamsCollapsed ? "Expand every team row" : "Collapse every team row"}
                 >
@@ -2609,10 +2621,25 @@ export default function RoadmapTracker() {
                             .filter((i) => i.teamId === team.id && i.strategicCategory === cat.id)
                             .sort((a, b) => displayData.columns.findIndex((c) => c.id === b.columnId) - displayData.columns.findIndex((c) => c.id === a.columnId));
                           if (teamItems.length === 0) return null;
+                          // Mobile has no swim-lane column, so the team label itself is the toggle.
+                          const laneCollapsed = collapsedTeams.includes(team.id);
                           return (
                             <div key={team.id}>
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">{team.name}</div>
-                              <div className="space-y-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleTeamCollapse(team.id)}
+                                title={laneCollapsed ? `Expand ${team.name}` : `Collapse ${team.name}`}
+                                className="w-full flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5 cursor-pointer"
+                              >
+                                <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${laneCollapsed ? "-rotate-90" : ""}`} />
+                                <span>{team.name}</span>
+                                {laneCollapsed && (
+                                  <span className="font-mono font-semibold text-[10px] text-stone-600 bg-white border border-stone-300 rounded px-1 py-px">
+                                    {teamItems.length}
+                                  </span>
+                                )}
+                              </button>
+                              <div className={`space-y-1.5 ${laneCollapsed ? "hidden" : ""}`}>
                                 {teamItems.map((item) => {
                                   const col = displayData.columns.find((c) => c.id === item.columnId);
                                   const { cleanText } = extractDate(item.text);
@@ -2662,18 +2689,42 @@ export default function RoadmapTracker() {
               ))}
             </div>
 
-            {/* Team swim lane rows */}
+            {/* Team swim lane rows — click the leftmost cell to collapse / expand the lane */}
             {displayData.teams.map((team) => {
+              const laneCollapsed = collapsedTeams.includes(team.id);
               return (
                 <div key={team.id} style={{ display: "grid", gridTemplateColumns: "140px repeat(4, 1fr)", marginTop: "10px" }}>
-                  <div className="bg-stone-200 border border-stone-300 rounded-l-lg flex items-center justify-center p-3 text-xs font-bold tracking-wide uppercase text-stone-900 text-center">
-                    {team.name}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleTeamCollapse(team.id)}
+                    title={laneCollapsed ? `Expand ${team.name}` : `Collapse ${team.name}`}
+                    className={`bg-stone-200 hover:bg-stone-300 border border-stone-300 rounded-l-lg flex items-center justify-center gap-1.5 ${laneCollapsed ? "px-2 py-1.5" : "p-3"} text-xs font-bold tracking-wide uppercase text-stone-900 text-center cursor-pointer transition-colors group/lane`}
+                  >
+                    <ChevronDown
+                      className={`w-3 h-3 flex-shrink-0 text-stone-500 group-hover/lane:text-stone-900 transition-transform ${laneCollapsed ? "-rotate-90" : ""}`}
+                    />
+                    <span className="group-hover/lane:underline decoration-dotted underline-offset-2">{team.name}</span>
+                  </button>
                   {STRATEGIC_CATEGORIES.map((cat, catIdx) => {
                     const isLastCat = catIdx === 3;
                     const cellItems = displayData.items
                       .filter((i) => i.teamId === team.id && i.strategicCategory === cat.id)
                       .sort((a, b) => displayData.columns.findIndex((c) => c.id === b.columnId) - displayData.columns.findIndex((c) => c.id === a.columnId));
+                    // Collapsed: keep the grid alignment but shrink to a thin strip showing how many
+                    // items each category is hiding, so the spread across categories stays readable.
+                    if (laneCollapsed) {
+                      return (
+                        <div key={cat.id} className={`${cat.bodyBg} border border-stone-200 border-l-0 px-2 py-1.5 flex items-center justify-center ${isLastCat ? "rounded-r-lg" : ""}`}>
+                          {cellItems.length > 0 ? (
+                            <span className="font-mono text-[10px] font-semibold text-stone-600 bg-white/70 border border-stone-300 rounded px-1.5 py-px">
+                              {cellItems.length}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-stone-300 italic">—</span>
+                          )}
+                        </div>
+                      );
+                    }
                     return (
                       <div key={cat.id} className={`${cat.bodyBg} border border-stone-200 border-l-0 p-2 min-h-[100px] ${isLastCat ? "rounded-r-lg" : ""}`}>
                         {cellItems.length === 0 ? (
@@ -2735,9 +2786,27 @@ export default function RoadmapTracker() {
               );
             })()}
 
+            {/* Collapse all / Expand all */}
+            {displayData.teams.length > 0 && (() => {
+              const allLanesCollapsed = displayData.teams.every((t) => collapsedTeams.includes(t.id));
+              return (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={() => persistCollapsedTeams(allLanesCollapsed ? [] : displayData.teams.map((t) => t.id))}
+                    className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
+                    title={allLanesCollapsed ? "Expand every swim lane" : "Collapse every swim lane"}
+                  >
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${allLanesCollapsed ? "-rotate-90" : ""}`} />
+                    {allLanesCollapsed ? "Expand all" : "Collapse all"}
+                  </button>
+                </div>
+              );
+            })()}
+
             {/* Strategic footer */}
             <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
               {!isPreview && <span><span className="font-bold">Click</span> any item to open it and assign a strategic category</span>}
+              <span><span className="font-bold">Click</span> a team name on the left to collapse / expand its swim lane</span>
               <span className="ml-auto opacity-40">{APP_VERSION}</span>
             </div>
           </div>
@@ -2834,10 +2903,35 @@ export default function RoadmapTracker() {
                 {displayData.teams.map((team) => {
                   const teamItems = timelineItems.filter((i) => i.teamId === team.id);
                   if (teamItems.length === 0) return null;
+                  const laneCollapsed = collapsedTeams.includes(team.id);
+                  // Collapsed, the band carries this view's headline number for the lane — how many
+                  // of the team's initiatives actually have an outcome metric.
+                  const laneWithOutcome = teamItems.filter((i) => outcomeChips(i).length > 0).length;
+                  const laneFullyCovered = laneWithOutcome === teamItems.length;
                   return (
                     <div key={team.id}>
-                      <div className="px-4 py-2 bg-stone-200 text-stone-800 text-[11px] font-mono font-bold uppercase tracking-widest">{team.name}</div>
-                      {teamItems.map((item) => {
+                      <button
+                        type="button"
+                        onClick={() => toggleTeamCollapse(team.id)}
+                        title={laneCollapsed ? `Expand ${team.name}` : `Collapse ${team.name}`}
+                        className="w-full px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-800 text-[11px] font-mono font-bold uppercase tracking-widest flex items-center gap-2 text-left cursor-pointer transition-colors group/lane"
+                      >
+                        <ChevronDown
+                          className={`w-3 h-3 flex-shrink-0 text-stone-500 group-hover/lane:text-stone-900 transition-transform ${laneCollapsed ? "-rotate-90" : ""}`}
+                        />
+                        <span className="group-hover/lane:underline decoration-dotted underline-offset-2">{team.name}</span>
+                        {laneCollapsed && (
+                          <span className="ml-auto flex items-center gap-2 normal-case tracking-normal text-[10px] font-semibold">
+                            <span className="bg-white/70 border border-stone-300 rounded px-1.5 py-px text-stone-600">
+                              {teamItems.length} initiative{teamItems.length !== 1 ? "s" : ""}
+                            </span>
+                            <span className={laneFullyCovered ? "text-emerald-700" : "text-stone-500"}>
+                              {laneWithOutcome}/{teamItems.length} with outcome
+                            </span>
+                          </span>
+                        )}
+                      </button>
+                      {!laneCollapsed && teamItems.map((item) => {
                         const { cleanText } = extractDate(item.text);
                         return (
                           <div key={item.id} className="grid border-b border-stone-100" style={{ gridTemplateColumns: "1fr 1fr" }}>
@@ -2863,8 +2957,35 @@ export default function RoadmapTracker() {
                 )}
               </div>
 
+              {/* Collapse all / Expand all — only touches lanes actually shown for this quarter.
+                  The collapsed set is shared with the other views, so both directions are scoped to
+                  what's on screen: teams with nothing this quarter are left exactly as they were. */}
+              {(() => {
+                const lanesShown = displayData.teams.filter((t) => timelineItems.some((i) => i.teamId === t.id));
+                if (lanesShown.length === 0) return null;
+                const shownIds = lanesShown.map((t) => t.id);
+                const allLanesCollapsed = shownIds.every((id) => collapsedTeams.includes(id));
+                return (
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      onClick={() => persistCollapsedTeams(
+                        allLanesCollapsed
+                          ? collapsedTeams.filter((id) => !shownIds.includes(id))
+                          : [...new Set([...collapsedTeams, ...shownIds])]
+                      )}
+                      className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
+                      title={allLanesCollapsed ? "Expand every swim lane" : "Collapse every swim lane"}
+                    >
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${allLanesCollapsed ? "-rotate-90" : ""}`} />
+                      {allLanesCollapsed ? "Expand all" : "Collapse all"}
+                    </button>
+                  </div>
+                );
+              })()}
+
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any initiative to set its outcome metric</span>}
+                <span><span className="font-bold">Click</span> a team band to collapse / expand its swim lane</span>
                 <span className="ml-auto opacity-40">{APP_VERSION}</span>
               </div>
             </div>
@@ -2924,7 +3045,7 @@ export default function RoadmapTracker() {
             );
           }
 
-          const allLanesCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => ganttCollapsed.includes(t.id));
+          const allLanesCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => collapsedTeams.includes(t.id));
 
           return (
             <div className="w-full">
@@ -2975,7 +3096,7 @@ export default function RoadmapTracker() {
                   <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center gap-2 px-4" style={{ width: LABEL, height: 36 }}>
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">Workstream</span>
                     <button
-                      onClick={() => persistGanttCollapsed(allLanesCollapsed ? [] : displayData.teams.map((t) => t.id))}
+                      onClick={() => persistCollapsedTeams(allLanesCollapsed ? [] : displayData.teams.map((t) => t.id))}
                       title={allLanesCollapsed ? "Expand every workstream lane" : "Collapse every workstream lane"}
                       className="ml-auto text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400 hover:text-stone-800 transition-colors">
                       {allLanesCollapsed ? "Expand all" : "Collapse all"}
@@ -3031,7 +3152,7 @@ export default function RoadmapTracker() {
                 {displayData.teams.map((team) => {
                   const teamRows = scheduled.filter((x) => x.it.teamId === team.id);
                   const { main, code } = parseWorkstreamName(team.name);
-                  const collapsed = ganttCollapsed.includes(team.id);
+                  const collapsed = collapsedTeams.includes(team.id);
                   // Collapsed lane: one muted band spanning the workstream's overall date range,
                   // so the row still shows *when* the work sits without listing every item.
                   const bandLeft = collapsed && teamRows.length > 0 ? Math.min(...teamRows.map((r) => r.x0)) : 0;
@@ -3041,7 +3162,7 @@ export default function RoadmapTracker() {
                   return (
                     <div key={team.id} className="flex border-b border-stone-200 last:border-b-0" style={{ width: LABEL + totalW }}>
                       {/* Whole label cell is the collapse/expand hit area (not just the text) */}
-                      <button data-gantt-label onClick={() => toggleGanttCollapse(team.id)} title={collapsed ? "Expand this workstream" : "Collapse this workstream"}
+                      <button data-gantt-label onClick={() => toggleTeamCollapse(team.id)} title={collapsed ? "Expand this workstream" : "Collapse this workstream"}
                         className="group sticky left-0 z-20 bg-white hover:bg-stone-50 border-r border-stone-200 flex-shrink-0 flex flex-col justify-center px-3 py-3 text-left transition-colors" style={{ width: LABEL }}>
                         <span className="flex items-start gap-1.5">
                           <ChevronDown className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-stone-400 group-hover:text-stone-800 transition-transform ${collapsed ? "-rotate-90" : ""}`} />

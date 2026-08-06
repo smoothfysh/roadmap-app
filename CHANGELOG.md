@@ -7,6 +7,48 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.22.0 — 2026-08-06
+
+- **Collapsed teams are now one shared setting across every view.** Collapse a team in BY TIME and
+  it's also collapsed in BY INNOVATION TYPE, BY IMPACT and the Gantt — one arrangement of who you're
+  looking at, not four.
+  - The four per-view keys are replaced by a single `roadmap-teams-collapsed-<scope>`.
+  - **Existing collapse state is migrated, not lost**: on first load the old per-view keys are merged
+    (a team collapsed in *any* view stays collapsed), written to the new key, and removed. Runs once.
+  - `Collapse all` / `Expand all` in any view now drives the shared set. In BY IMPACT both directions
+    stay scoped to the lanes shown for the selected quarter, so teams with nothing that quarter are
+    left as they were rather than being silently expanded.
+- Internally the four near-identical state/toggle/persist trios collapse into one
+  `collapsedTeams` + `toggleTeamCollapse` + `persistCollapsedTeams`, so all views share one code path.
+
+## 4.21.0 — 2026-08-06
+
+- **"BY IMPACT": swim lanes are now collapsible.** Click a team band to collapse or expand its
+  initiatives, with a chevron showing the state.
+  - A collapsed band rolls up the view's headline number for that lane — `N initiatives` and
+    `M/N with outcome`, turning green once every initiative in the lane has an outcome metric. So you
+    can scan outcome coverage team by team without expanding anything.
+  - **"Collapse all" / "Expand all"** button below the board. It only counts lanes actually shown for
+    the selected quarter, so the label stays correct as you page between quarters.
+  - Remembered in `localStorage` per roadmap (`roadmap-impact-collapsed-<scope>`), independent of the
+    other views' collapse state.
+- Every view with team rows now collapses the same way: BY TIME, BY INNOVATION TYPE, BY IMPACT and
+  the Gantt.
+
+## 4.20.0 — 2026-08-06
+
+- **"BY INNOVATION TYPE": swim lanes are now collapsible.** Click a team name in the leftmost cell
+  of its lane to collapse or expand it.
+  - A chevron in that cell shows the state. Collapsed, the lane shrinks to a thin strip that keeps
+    the four category columns aligned and shows a per-category count — so you can still read how a
+    team's work is spread across *Do or Die* / *Stay Relevant* / *Beat the Competition* / *Disrupt*
+    without expanding it.
+  - On mobile (which groups by category instead of showing lanes) the team sub-heading inside each
+    category card is the toggle, sharing the same collapsed set so both layouts stay in step.
+  - **"Collapse all" / "Expand all"** button below the grid.
+  - Remembered in `localStorage` per roadmap (`roadmap-strategic-collapsed-<scope>`), independent of
+    the BY TIME board and Gantt collapse state — each view keeps its own arrangement.
+
 ## 4.19.0 — 2026-08-06
 
 - **"BY TIME": clicking a team name now collapses that team** instead of opening the details modal.
