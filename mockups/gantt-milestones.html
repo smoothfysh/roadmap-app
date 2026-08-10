@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gantt milestones — mockup</title>
+<style>
+  :root{
+    --s50:#fafaf9; --s100:#f5f5f4; --s200:#e7e5e4; --s300:#d6d3d1; --s400:#a8a29e;
+    --s500:#78716c; --s700:#44403c; --s800:#292524; --s900:#1c1917;
+    --sky100:#e0f2fe; --sky400:#38bdf8; --sky800:#075985;
+    --amb100:#fef3c7; --amb400:#fbbf24; --amb900:#78350f;
+    --rose100:#ffe4e6; --rose400:#fb7185; --rose800:#9f1239;
+    --emer100:#d1fae5; --emer500:#10b981; --emer800:#065f46;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:28px 24px 80px;
+    background:var(--s50); color:var(--s900);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{font-size:12px;color:var(--s500);margin:0 0 26px}
+  .sechead{
+    font-family:ui-monospace,Consolas,monospace; font-size:10px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.14em; color:var(--s400);
+    margin:34px 0 10px; display:flex; align-items:center; gap:10px;
+  }
+  .sechead::after{content:"";flex:1;height:1px;background:var(--s200)}
+  .caption{font-size:11px;color:var(--s500);margin:8px 0 0;line-height:1.6}
+  .caption b{color:var(--s700)}
+
+  /* ── legend / toolbar ───────────────────────────────────────── */
+  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;font-size:12px;margin-bottom:12px}
+  .lg{display:flex;align-items:center;gap:6px;color:var(--s700)}
+  .swatch{width:16px;height:14px;border-radius:2px;border-left:4px solid}
+  .sk{background:var(--sky100);border-color:var(--sky400)}
+  .am{background:var(--amb100);border-color:var(--amb400)}
+  .ro{background:var(--rose100);border-color:var(--rose400)}
+  .em{background:var(--emer100);border-color:var(--emer500)}
+  .st{background:var(--s100);border-color:var(--s400)}
+  .zoom{margin-left:auto;display:flex;align-items:center;gap:6px}
+  .zlabel{font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--s400);margin-right:2px}
+  .zbtn{
+    font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;
+    padding:6px 10px;border-radius:6px;border:1px solid var(--s200);background:#fff;color:var(--s500);cursor:pointer;
+  }
+  .zbtn:hover{border-color:var(--s400)}
+  .zbtn[aria-pressed="true"]{background:var(--s800);border-color:var(--s800);color:#fff}
+
+  /* ── gantt chart ────────────────────────────────────────────── */
+  .chart{border:1px solid var(--s200);border-radius:12px;background:#fff;overflow:hidden}
+  .thead{display:flex;border-bottom:1px solid var(--s200);background:#fff}
+  .tlabelcell{
+    width:210px;flex:0 0 210px;border-right:1px solid var(--s200);
+    display:flex;align-items:center;padding:0 16px;height:38px;
+  }
+  .tlabelcell span{font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--s400)}
+  .tcols{position:relative;height:38px;flex:0 0 auto}
+  .tcol{
+    position:absolute;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;
+    align-items:center;border-left:1px solid var(--s200);
+  }
+  .tcol:first-child{border-left:0}
+  .tcol .m{font-family:ui-monospace,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--s700);text-transform:uppercase}
+  .tcol .y{font-family:ui-monospace,Consolas,monospace;font-size:8px;color:var(--s400);letter-spacing:.12em}
+
+  .lane{display:flex;border-bottom:1px solid var(--s200)}
+  .lane:last-child{border-bottom:0}
+  .lanelabel{
+    width:210px;flex:0 0 210px;border-right:1px solid var(--s200);background:#fff;
+    display:flex;align-items:center;gap:6px;padding:12px;
+  }
+  .chev{width:12px;height:12px;flex:0 0 12px;color:var(--s400)}
+  .lanelabel .nm{display:block;font-size:13px;font-weight:700;color:var(--s800);line-height:1.2}
+  .lanelabel .cd{display:block;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--s400);line-height:1.2;margin-top:2px}
+  .rows{position:relative;flex:0 0 auto;padding:8px 0}
+
+  .grid{position:absolute;inset:0;pointer-events:none}
+  .gline{position:absolute;top:0;bottom:0;width:1px;background:var(--s200)}
+  .today{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;z-index:6;pointer-events:none}
+  .todaywash{position:absolute;top:0;bottom:0;background:rgba(239,68,68,.045)}
+
+  .row{position:relative;height:34px}
+  .bar{
+    position:absolute;top:4px;height:26px;border-radius:6px;border-left:4px solid;
+    display:flex;align-items:center;gap:6px;padding:0 8px;overflow:hidden;white-space:nowrap;
+    font-size:11px;font-weight:500;cursor:pointer;
+  }
+  .bar:hover{filter:brightness(.97)}
+  .bar .txt{overflow:hidden;text-overflow:ellipsis}
+  .bar .tag{margin-left:auto;font-family:ui-monospace,Consolas,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.06em;opacity:.65}
+  .bar.sky{background:var(--sky100);color:var(--sky800);border-color:var(--sky400)}
+  .bar.amber{background:var(--amb100);color:var(--amb900);border-color:var(--amb400)}
+  .bar.rose{background:var(--rose100);color:var(--rose800);border-color:var(--rose400)}
+  .bar.emerald{background:var(--emer100);color:var(--emer800);border-color:var(--emer500)}
+
+  /* diamond marker — 9px square rotated 45°, white halo so it reads on any pastel fill */
+  .dia{
+    position:absolute;width:9px;height:9px;transform:rotate(45deg);
+    border:1.5px solid var(--s700);background:#fff;cursor:pointer;z-index:7;
+    box-shadow:0 0 0 2px #fff;
+  }
+  .dia.past{background:var(--s700)}
+  .dia:hover{border-color:var(--s900);box-shadow:0 0 0 2px #fff,0 0 0 3.5px rgba(68,64,60,.25)}
+  .dia.open{box-shadow:0 0 0 2px #fff,0 0 0 3.5px rgba(68,64,60,.35)}
+  .dia.nudged::after{content:"";position:absolute;inset:-1.5px;border-radius:1px}
+
+  /* popover + dotted leader — FIXED position, drawn in a body-level overlay so the
+     Gantt's overflow-x:auto scroll container can never clip them */
+  .leader{position:fixed;width:0;border-left:1.5px dashed var(--s500);z-index:48;pointer-events:none}
+  .pop{
+    position:fixed;z-index:49;min-width:186px;max-width:250px;background:#fff;
+    border:1px solid var(--s300);border-radius:8px;box-shadow:0 10px 24px -8px rgba(28,25,23,.28);
+    padding:9px 10px;
+  }
+  .pop .pdate{font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--s400);display:flex;align-items:center;gap:6px}
+  .pop .pdate .dot{width:6px;height:6px;transform:rotate(45deg);background:var(--s700);flex:0 0 6px}
+  .pop .plabel{font-size:12px;font-weight:600;color:var(--s900);margin-top:4px;line-height:1.35}
+  .pop .pitem{font-size:10px;color:var(--s400);margin-top:5px;padding-top:5px;border-top:1px solid var(--s100);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pop .pclose{position:absolute;top:5px;right:5px;border:0;background:transparent;color:var(--s400);cursor:pointer;font-size:13px;line-height:1;padding:2px 4px;border-radius:4px}
+  .pop .pclose:hover{background:var(--s100);color:var(--s700)}
+
+  .footnote{margin-top:14px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--s500);display:flex;flex-wrap:wrap;gap:4px 22px}
+  .footnote b{color:var(--s700)}
+
+  /* ── modal mock ─────────────────────────────────────────────── */
+  .stage{background:rgba(28,25,23,.5);border-radius:12px;padding:28px;display:flex;justify-content:center}
+  .modal{width:100%;max-width:512px;background:#fff;border-radius:12px;box-shadow:0 24px 48px -12px rgba(0,0,0,.4);overflow:hidden}
+  .mhead{padding:16px 20px;border-bottom:1px solid var(--s100);display:flex;align-items:flex-start;gap:12px}
+  .mtag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#dbeafe;color:#1e40af}
+  .mpill{font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:600;letter-spacing:.1em;border:1px solid var(--s400);color:var(--s700);padding:2px 6px;border-radius:3px}
+  .mtitle{font-size:14px;font-weight:700;color:var(--s900);margin-top:6px;line-height:1.35}
+  .mx{margin-left:auto;border:0;background:transparent;color:var(--s400);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:4px}
+  .mtabs{display:flex;border-bottom:1px solid var(--s100)}
+  .mtab{font-family:ui-monospace,Consolas,monospace;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+    padding:10px 20px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--s400);cursor:pointer}
+  .mtab.on{border-bottom-color:var(--s700);color:var(--s900)}
+  .mbody{padding:16px 20px;display:flex;flex-direction:column;gap:16px}
+  .flabel{font-family:ui-monospace,Consolas,monospace;font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--s400);display:block;margin-bottom:6px}
+  .flabel .hint{text-transform:none;letter-spacing:0;opacity:.6}
+  .fin{width:100%;font-size:12px;border:1px solid var(--s300);border-radius:4px;padding:5px 8px;background:#fff;font-family:inherit}
+  .fin:focus{outline:0;border-color:var(--s500)}
+  .frow{display:flex;gap:12px}
+  .frow>div{flex:1}
+  .tiny{font-size:9px;color:var(--s400);display:block;margin-bottom:4px}
+
+  /* collapsible milestones section */
+  .msec{border:1px solid var(--s200);border-radius:8px;overflow:hidden}
+  .mstoggle{
+    width:100%;display:flex;align-items:center;gap:8px;background:var(--s50);border:0;
+    padding:9px 11px;cursor:pointer;text-align:left;
+  }
+  .mstoggle:hover{background:var(--s100)}
+  .mstoggle .cv{display:inline-block;transition:transform .15s;color:var(--s400);font-size:10px}
+  .msec.open .mstoggle .cv{transform:rotate(90deg)}
+  .mstoggle .lbl{font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--s500)}
+  .mstoggle .cnt{font-family:ui-monospace,Consolas,monospace;font-size:9px;font-weight:700;background:var(--s200);color:var(--s700);border-radius:9px;padding:1px 7px}
+  .mstoggle .hint{margin-left:auto;font-size:10px;color:var(--s400)}
+  .msbody{display:none;padding:11px;border-top:1px solid var(--s200);flex-direction:column;gap:7px}
+  .msec.open .msbody{display:flex}
+  .mrow{display:flex;align-items:center;gap:7px}
+  .mrow .dm{width:9px;height:9px;flex:0 0 9px;transform:rotate(45deg);border:1.5px solid var(--s700);background:#fff}
+  .mrow .dm.past{background:var(--s700)}
+  .mrow input[type=date]{flex:0 0 130px;font-size:11px;border:1px solid var(--s300);border-radius:4px;padding:4px 6px;font-family:ui-monospace,Consolas,monospace}
+  .mrow input[type=text]{flex:1;min-width:0;font-size:11px;border:1px solid var(--s300);border-radius:4px;padding:4px 7px;font-family:inherit}
+  .mrow .del{flex:0 0 auto;border:0;background:transparent;color:var(--s400);cursor:pointer;font-size:13px;padding:3px 5px;border-radius:4px}
+  .mrow .del:hover{background:var(--rose100);color:var(--rose800)}
+  .msadd{
+    align-self:flex-start;font-family:ui-monospace,Consolas,monospace;font-size:10px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.1em;border:1px dashed var(--s300);background:#fff;color:var(--s500);
+    border-radius:6px;padding:6px 11px;cursor:pointer;margin-top:2px;
+  }
+  .msadd:hover{border-color:var(--s400);color:var(--s800)}
+  .msempty{font-size:11px;color:var(--s400);padding:2px 0}
+  .msnote{font-size:10px;color:var(--s400);margin-top:3px}
+
+  /* ── spec panel ─────────────────────────────────────────────── */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+  .card{background:#fff;border:1px solid var(--s200);border-radius:10px;padding:14px 16px}
+  .card h3{margin:0 0 8px;font-family:ui-monospace,Consolas,monospace;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--s400)}
+  .card ul{margin:0;padding-left:16px;font-size:12px;color:var(--s700);line-height:1.65}
+  .card li+li{margin-top:4px}
+  .card code{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:var(--s100);padding:1px 4px;border-radius:3px;color:var(--s800)}
+  pre{margin:0;background:var(--s900);color:#e7e5e4;border-radius:8px;padding:12px 14px;overflow-x:auto;
+    font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.6}
+  pre .k{color:#7dd3fc} pre .v{color:#fcd34d} pre .c{color:#a8a29e}
+  .warn{border-left:3px solid var(--amb400);background:#fffbeb}
+  .warn h3{color:var(--amb900)}
+  .scroller{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Gantt milestones — interactive mockup</h1>
+  <p class="sub">v4.22.0 · no app code changed yet · click any diamond, and the <b>Milestones</b> section in the modal below</p>
+
+  <!-- ══ 1. GANTT ══ -->
+  <div class="sechead">1 — Diamonds on the bars</div>
+
+  <div class="legend">
+    <span class="lg"><span class="swatch sk"></span>On Track</span>
+    <span class="lg"><span class="swatch am"></span>At Risk</span>
+    <span class="lg"><span class="swatch ro"></span>Blocked</span>
+    <span class="lg"><span class="swatch em"></span>Done</span>
+    <span class="lg"><span class="swatch st"></span>Deprioritised</span>
+    <span class="zoom">
+      <span class="zlabel">Timeline</span>
+      <button class="zbtn" data-zoom="compact" aria-pressed="false">Compact</button>
+      <button class="zbtn" data-zoom="expand" aria-pressed="true">Expand</button>
+    </span>
+  </div>
+
+  <div class="legend" style="margin-bottom:12px">
+    <span class="zlabel" style="margin-right:0">Mockup control — marker placement</span>
+    <button class="zbtn" data-mark="center" aria-pressed="false">On the bar</button>
+    <button class="zbtn" data-mark="edge" aria-pressed="true">Top edge</button>
+    <span style="font-size:11px;color:var(--s500)">← <b>Top edge</b> is what shipped in v4.23.0; "On the bar" was the rejected alternative</span>
+  </div>
+
+  <div class="scroller" id="scroller">
+    <div class="chart" id="chart"></div>
+  </div>
+  <div id="overlay"></div>
+
+  <div class="footnote">
+    <span><b>Click</b> a diamond for its detail · <b>click</b> a bar to open the item · the red line marks today</span>
+  </div>
+
+  <p class="caption">
+    Diamond is <b>vertically centred inside the bar</b> at its date, with a white halo so it stays legible on any of the five
+    pastel fills. <b>Hollow = still ahead, solid = date passed.</b> The popover is drawn in a
+    <b>page-level overlay, not inside the chart</b> — the Gantt body is an <span class="mono">overflow-x:auto</span> scroller,
+    so anything drawn in it gets clipped. It flips below the bar when there's no room above, and closes on scroll, outside
+    click or <span class="mono">Esc</span>. Read-only; editing happens in the modal.
+  </p>
+  <p class="caption">
+    <b>Two things worth a look before I build it.</b>
+    (1) Hit <b>Compact</b> — the two September milestones on <i>Listing quality score</i> are 7 days apart, under 14px at
+    compact width, so the later one nudges right to stay clickable.
+    (2) <b>Centring the diamond inside the bar costs label text</b> — I clip the label short of the leftmost diamond so a
+    marker never sits on top of a word, which leaves <i>Semantic search rollout</i> reading as
+    "<span class="mono">Semanti..</span>". Toggle <b>Top edge</b> above to see the same chart with the diamonds straddling the
+    bar's top edge instead: every label survives intact, at the cost of a slightly taller row and a looser tie to the bar.
+    Tell me which one to ship.
+  </p>
+
+  <!-- ══ 2. MODAL ══ -->
+  <div class="sechead">2 — Entering them in the item modal</div>
+
+  <div class="stage">
+    <div class="modal">
+      <div class="mhead">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="mtag">FR</span>
+            <span class="mpill">20 NOV</span>
+          </div>
+          <div class="mtitle">Listing quality score</div>
+        </div>
+        <button class="mx" title="Close">✕</button>
+      </div>
+
+      <div class="mtabs">
+        <button class="mtab on">Details</button>
+        <button class="mtab">Outcome Metric</button>
+      </div>
+
+      <div class="mbody">
+        <div>
+          <label class="flabel">Title <span class="hint">— prefix with country code to set tag, e.g. FR: name</span></label>
+          <input class="fin" type="text" value="FR: Listing quality score">
+        </div>
+
+        <div>
+          <label class="flabel">Timeline <span class="hint">— End date sets the due pill &amp; places the item on the Gantt</span></label>
+          <div class="frow">
+            <div><span class="tiny">Start</span><input class="fin" type="date" value="2026-08-03"></div>
+            <div><span class="tiny">End (due)</span><input class="fin" type="date" value="2026-11-20"></div>
+          </div>
+        </div>
+
+        <!-- the new bit -->
+        <div class="msec" id="msec">
+          <button class="mstoggle" id="mstoggle">
+            <span class="cv">▶</span>
+            <span class="lbl">Milestones</span>
+            <span class="cnt" id="mcount">2</span>
+            <span class="hint">shown as diamonds on the Gantt bar</span>
+          </button>
+          <div class="msbody" id="msbody"></div>
+        </div>
+
+        <div>
+          <label class="flabel">Strategic Category</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="mpill" style="border-color:var(--s300);color:var(--s400)">None</span>
+            <span class="mpill" style="border-color:var(--s300);color:var(--s400)">"Run the business"</span>
+            <span class="mpill" style="border-color:var(--s300);color:var(--s400)">"Grow the business"</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="flabel">Notes</label>
+          <textarea class="fin" rows="3" placeholder="Add a description or comment…"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    The section sits <b>directly under Timeline</b> — milestone dates only make sense next to start/end — and is
+    <b>collapsed every time the modal opens</b>, with the count in the pill. Rows are kept <b>sorted by date</b> on save, so
+    typing a date out of order re-orders the list. In a read-only share preview the section still opens, but the inputs are
+    disabled and the <span class="mono">+ Add</span> button is gone — same treatment Start/End already get.
+  </p>
+
+  <!-- ══ 3. SPEC ══ -->
+  <div class="sechead">3 — What this implies in code</div>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Data model — one new field per item</h3>
+      <pre><span class="c">// item.milestones — null when unused</span>
+[
+  { <span class="k">id</span>: <span class="v">"ms-1a2b"</span>,
+    <span class="k">date</span>: <span class="v">"2026-09-15"</span>,
+    <span class="k">label</span>: <span class="v">"Model v2 signed off"</span> },
+  …
+]</pre>
+      <p class="msnote">Sorted by <code>date</code> on write, so every reader can trust the order.</p>
+    </div>
+
+    <div class="card">
+      <h3>Rendering rules</h3>
+      <ul>
+        <li>Position from the same day→x mapping the bars use, so a diamond can't drift from its bar.</li>
+        <li>A milestone outside the item's start/end range is <b>clamped to the nearest bar edge</b> and flagged in the popover.</li>
+        <li>Nudge-apart: minimum 14px between centres, applied left→right after sorting.</li>
+        <li>Popover lives in a <b>fixed-position overlay</b> — drawing it inside the Gantt body means <code>overflow-x:auto</code> clips it.</li>
+        <li>Row height goes 34px → 36px only if we pick the top-edge placement.</li>
+        <li>Collapsed lanes stay plain — no diamonds on the muted band.</li>
+        <li>Gantt only. Cards in the other three views are unchanged.</li>
+        <li>Read-only previews keep diamonds and popovers; the modal's inputs go disabled.</li>
+      </ul>
+    </div>
+
+    <div class="card warn">
+      <h3>⚠ Touches the "do not break" list</h3>
+      <ul>
+        <li><b>Sharing</b> — <code>milestones</code> rides inside the item objects in <code>encodeShareData</code>. Deflate handles it; a 40-item roadmap with a few milestones each adds roughly 100–200 chars to the link.</li>
+        <li><b>Saving</b> — backup JSON picks it up for free; <code>handleBackupImport</code> needs the field defaulted to <code>null</code> for older files.</li>
+        <li><b>CSV</b> — new <code>milestones</code> header holding a JSON string, exactly the pattern <code>enables</code> already uses at App.jsx:175.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Open questions I'd still like answered</h3>
+      <ul>
+        <li>Cap the number of milestones per item, or unlimited?</li>
+        <li>Should a milestone label appear <b>next to</b> its diamond when there's room, or only on click?</li>
+        <li>Does an unscheduled item (no start/end) accept milestones, or is the section disabled until dates exist?</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ───────── mock data ───────── */
+const TODAY = "2026-08-10";
+const MONTHS = [
+  {y:2026,m:6},{y:2026,m:7},{y:2026,m:8},{y:2026,m:9},{y:2026,m:10},{y:2026,m:11}
+];
+const MN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const LANES = [
+  { name:"SEARCH & DISCOVERY", code:"(aka NORTHSTAR)", items:[
+    { text:"Semantic search rollout", tag:"", flag:"sky", s:"2026-07-06", e:"2026-10-15", ms:[
+      {date:"2026-07-20", label:"Search index rebuild complete"},
+      {date:"2026-08-28", label:"Beta open to internal users"},
+      {date:"2026-10-01", label:"GA gate review with legal"}
+    ]},
+    { text:"Listing quality score", tag:"FR", flag:"amber", s:"2026-08-03", e:"2026-11-20", ms:[
+      {date:"2026-09-15", label:"Model v2 signed off"},
+      {date:"2026-09-22", label:"Pilot live with 3 agencies"}
+    ]}
+  ]},
+  { name:"PAYMENTS", code:"(aka QUICKPAY)", items:[
+    { text:"SEPA instant payouts", tag:"DE/AT", flag:"rose", s:"2026-09-01", e:"2026-12-18", ms:[
+      {date:"2026-11-03", label:"Bank certification passed"}
+    ]},
+    { text:"Checkout redesign", tag:"", flag:"emerald", s:"2026-07-13", e:"2026-09-30", ms:[
+      {date:"2026-08-04", label:"Design freeze"}
+    ]}
+  ]}
+];
+
+/* ───────── date + layout helpers ───────── */
+const abs = iso => { const [y,m,d]=iso.split("-").map(Number); return Date.UTC(y,m-1,d)/864e5; };
+const dim = (y,m) => new Date(Date.UTC(y,m+1,0)).getUTCDate();
+const fmt = iso => { const [y,m,d]=iso.split("-").map(Number); return `${d} ${MN[m-1].toUpperCase()} ${y}`; };
+
+const LABEL = 210;
+const MIN_GAP = 14;   // px between diamond centres before nudging
+const MIN_BAR = 10;
+let colW = 150;              // "expand" preset; compact drops to 96
+let markerMode = "edge";     // "edge" = straddling the bar's top edge (shipped) · "center" = inside it
+
+function layout(){
+  const first = abs(`${MONTHS[0].y}-${String(MONTHS[0].m+1).padStart(2,"0")}-01`);
+  let total = 0;
+  const cols = MONTHS.map(c => {
+    const n = dim(c.y,c.m);
+    const col = {...c, x:total, w:colW, days:n, a0:abs(`${c.y}-${String(c.m+1).padStart(2,"0")}-01`)};
+    total += colW; return col;
+  });
+  // x for a date: find its column, then interpolate within it by day
+  const xOf = iso => {
+    const a = abs(iso);
+    for (const c of cols){
+      if (a >= c.a0 && a < c.a0 + c.days) return c.x + ((a - c.a0) / c.days) * c.w;
+    }
+    return a < cols[0].a0 ? 0 : total;
+  };
+  return {cols, total, xOf, first};
+}
+
+/* ───────── render ───────── */
+let openPop = null;   // {laneIdx,itemIdx,msIdx}
+
+function render(){
+  const L = layout();
+  const chart = document.getElementById("chart");
+  chart.innerHTML = "";
+  chart.style.width = (LABEL + L.total) + "px";
+
+  // header
+  const th = document.createElement("div");
+  th.className = "thead";
+  th.innerHTML = `<div class="tlabelcell"><span>Timeline</span></div>`;
+  const tc = document.createElement("div");
+  tc.className = "tcols"; tc.style.width = L.total + "px";
+  L.cols.forEach(c => {
+    const el = document.createElement("div");
+    el.className = "tcol";
+    el.style.left = c.x + "px"; el.style.width = c.w + "px";
+    el.innerHTML = `<div class="m">${MN[c.m]}</div><div class="y">${c.y}</div>`;
+    tc.appendChild(el);
+  });
+  th.appendChild(tc); chart.appendChild(th);
+
+  const todayX = L.xOf(TODAY);
+
+  LANES.forEach((lane, li) => {
+    const laneEl = document.createElement("div");
+    laneEl.className = "lane";
+    laneEl.innerHTML = `<div class="lanelabel">
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        <span><span class="nm">${lane.name}</span><span class="cd">${lane.code}</span></span>
+      </div>`;
+
+    const rows = document.createElement("div");
+    rows.className = "rows"; rows.style.width = L.total + "px";
+
+    // gridlines + today
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    L.cols.forEach((c,i) => { if(i){ const g=document.createElement("div"); g.className="gline"; g.style.left=c.x+"px"; grid.appendChild(g);} });
+    rows.appendChild(grid);
+    const tl = document.createElement("div"); tl.className="today"; tl.style.left=todayX+"px"; rows.appendChild(tl);
+
+    lane.items.forEach((it, ii) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const x0 = L.xOf(it.s), x1 = L.xOf(it.e);
+      const w = Math.max(MIN_BAR, x1 - x0 - 4);
+      const left = Math.min(x0 + 2, x1 - 2 - w);
+
+      // diamonds — clamp into the bar, then nudge apart left→right
+      const pts = it.ms
+        .map((m, mi) => ({...m, mi, raw: Math.min(Math.max(L.xOf(m.date), left + 5), left + w - 5)}))
+        .sort((a,b) => a.raw - b.raw);
+      let prev = -1e9;
+      pts.forEach(p => {
+        p.x = p.raw < prev + MIN_GAP ? prev + MIN_GAP : p.raw;
+        p.nudged = p.x !== p.raw;
+        prev = p.x;
+      });
+
+      const bar = document.createElement("div");
+      bar.className = "bar " + it.flag;
+      bar.style.left = left + "px"; bar.style.width = w + "px";
+      bar.title = it.text;
+      // ON THE BAR: label is clipped short of the leftmost diamond so a marker never lands on
+      // the text. TOP EDGE: diamonds sit clear of the text, so the label keeps its full width.
+      const textRoom = (markerMode === "center" && pts.length)
+        ? Math.max(0, pts[0].x - left - 13)
+        : w - 12;
+      bar.innerHTML = (textRoom >= 26
+          ? `<span class="txt" style="max-width:${textRoom}px">${it.text}</span>`
+          : `<span class="txt" style="max-width:0"></span>`)
+        + (it.tag ? `<span class="tag">${it.tag}</span>` : "");
+      bar.addEventListener("click", e => { e.stopPropagation(); document.getElementById("msec").scrollIntoView({behavior:"smooth",block:"center"}); });
+      row.appendChild(bar);
+
+      pts.forEach(p => {
+        const d = document.createElement("div");
+        const past = abs(p.date) <= abs(TODAY);
+        d.className = "dia" + (past ? " past" : "") + (p.nudged ? " nudged" : "");
+        d.style.left = (p.x - 4.5) + "px";
+        d.style.top  = (markerMode === "center" ? 4 + 13 - 4.5 : 4 - 4.5) + "px";  // bar centre, or its top edge
+        d.title = fmt(p.date) + " — " + p.label;
+        const key = li+"/"+ii+"/"+p.mi;
+        d.dataset.key = key;
+        if (openPop && openPop.key === key) d.classList.add("open");
+        d.addEventListener("click", e => {
+          e.stopPropagation();
+          openPop = (openPop && openPop.key === key)
+            ? null
+            : { key, date: p.date, label: p.label, item: (it.tag ? it.tag + ": " : "") + it.text };
+          renderPop();
+        });
+        row.appendChild(d);
+      });
+
+      rows.appendChild(row);
+    });
+
+    laneEl.appendChild(rows);
+    chart.appendChild(laneEl);
+  });
+}
+
+/* ───────── popover overlay ─────────
+   Body-level + position:fixed, anchored to the diamond's viewport rect. The Gantt body is an
+   overflow-x:auto scroller, so anything drawn inside it gets clipped — hence the overlay. It
+   closes on scroll (the anchor would go stale) as well as on outside click / Esc. */
+function renderPop(){
+  const ov = document.getElementById("overlay");
+  ov.innerHTML = "";
+  document.querySelectorAll(".dia.open").forEach(d => d.classList.remove("open"));
+  if (!openPop) return;
+
+  const d = document.querySelector(`.dia[data-key="${openPop.key}"]`);
+  if (!d) { openPop = null; return; }
+  d.classList.add("open");
+  const r = d.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+
+  const pop = document.createElement("div");
+  pop.className = "pop";
+  pop.innerHTML =
+    `<button class="pclose" title="Close">✕</button>
+     <div class="pdate"><span class="dot"></span>${fmt(openPop.date)}</div>
+     <div class="plabel">${openPop.label || "(untitled milestone)"}</div>
+     <div class="pitem">${openPop.item}</div>`;
+  pop.style.visibility = "hidden";
+  pop.addEventListener("click", e => e.stopPropagation());
+  pop.querySelector(".pclose").addEventListener("click", () => { openPop = null; renderPop(); });
+  ov.appendChild(pop);
+
+  // Flip below the bar when there isn't room above, so it never runs off the top.
+  const h = pop.offsetHeight, w = pop.offsetWidth, GAP = 30;
+  const above = cy - h - GAP > 8;
+  const top = above ? cy - GAP - h : cy + GAP;
+  const left = Math.min(Math.max(8, cx - w/2), window.innerWidth - w - 8);
+  pop.style.top = top + "px";
+  pop.style.left = left + "px";
+  pop.style.visibility = "visible";
+
+  const lead = document.createElement("div");
+  lead.className = "leader";
+  lead.style.left = cx + "px";
+  lead.style.top = (above ? top + h : cy + 6) + "px";
+  lead.style.height = (above ? cy - 6 - (top + h) : GAP - 6) + "px";
+  ov.appendChild(lead);
+}
+
+document.addEventListener("click", () => { if (openPop){ openPop = null; renderPop(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && openPop){ openPop = null; renderPop(); } });
+// Attached late so a browser restoring its scroll position on load can't instantly close the
+// intro popover below.
+setTimeout(() => {
+  window.addEventListener("scroll", () => { if (openPop){ openPop = null; renderPop(); } }, true);
+}, 500);
+window.addEventListener("resize", () => { if (openPop){ openPop = null; renderPop(); } });
+
+document.querySelectorAll("[data-zoom]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-zoom]").forEach(o => o.setAttribute("aria-pressed", String(o === b)));
+  colW = b.dataset.zoom === "compact" ? 96 : 150;
+  openPop = null;
+  render();
+  renderPop();
+}));
+
+document.querySelectorAll("[data-mark]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-mark]").forEach(o => o.setAttribute("aria-pressed", String(o === b)));
+  markerMode = b.dataset.mark;
+  openPop = null;
+  render();
+  renderPop();
+}));
+
+/* ───────── modal milestone section ───────── */
+let MS = [
+  {date:"2026-09-15", label:"Model v2 signed off"},
+  {date:"2026-09-22", label:"Pilot live with 3 agencies"}
+];
+
+function renderMs(){
+  const body = document.getElementById("msbody");
+  document.getElementById("mcount").textContent = MS.length;
+  body.innerHTML = "";
+  if (!MS.length) body.innerHTML = `<div class="msempty">No milestones yet — add one to mark a key date on the bar.</div>`;
+  MS.slice().sort((a,b) => (a.date||"9999").localeCompare(b.date||"9999")).forEach((m, i) => {
+    const row = document.createElement("div");
+    row.className = "mrow";
+    const past = m.date && abs(m.date) <= abs(TODAY);
+    row.innerHTML =
+      `<span class="dm${past ? " past" : ""}"></span>
+       <input type="date" value="${m.date}">
+       <input type="text" value="${m.label.replace(/"/g,"&quot;")}" placeholder="What happens on this date?">
+       <button class="del" title="Remove">✕</button>`;
+    row.querySelector("input[type=date]").addEventListener("change", e => { m.date = e.target.value; syncFirstItem(); renderMs(); });
+    row.querySelector("input[type=text]").addEventListener("input", e => { m.label = e.target.value; syncFirstItem(); });
+    row.querySelector(".del").addEventListener("click", () => { MS = MS.filter(x => x !== m); syncFirstItem(); renderMs(); });
+    body.appendChild(row);
+  });
+  const add = document.createElement("button");
+  add.className = "msadd"; add.textContent = "+ Add milestone";
+  add.addEventListener("click", () => { MS.push({date:"2026-10-06", label:""}); syncFirstItem(); renderMs(); });
+  body.appendChild(add);
+  const note = document.createElement("div");
+  note.className = "msnote"; note.textContent = "Kept in date order automatically. Solid diamond = date already passed.";
+  body.appendChild(note);
+}
+
+/* edits here flow straight to the chart above, so the two stay honest */
+function syncFirstItem(){
+  LANES[0].items[1].ms = MS.filter(m => m.date).map(m => ({date:m.date, label:m.label || "(untitled milestone)"}));
+  openPop = null;
+  render();
+  renderPop();
+}
+
+document.getElementById("mstoggle").addEventListener("click", () => {
+  document.getElementById("msec").classList.toggle("open");
+});
+
+render();
+renderMs();
+
+/* one popover open on load so the leader line is visible without hunting for it */
+openPop = { key:"0/0/1", date:"2026-08-28", label:"Beta open to internal users", item:"Semantic search rollout" };
+renderPop();
+</script>
+</body>
+</html>

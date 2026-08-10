@@ -154,6 +154,7 @@ function csvToItems(csvText) {
       cadence:           obj.cadence || null,
       startDate:         obj.startDate || null,
       endDate:           obj.endDate || null,
+      milestones:        (() => { try { return obj.milestones ? JSON.parse(obj.milestones) : null; } catch { return null; } })(),
       outcomeMax:        obj.outcomeMax ? Number(obj.outcomeMax) : null,
       metricName:        obj.metricName || null,
       metricDir:         obj.metricDir || null,
@@ -173,12 +174,13 @@ function itemsToCsv(items) {
   };
   const rows = items.map((i) => headers.map((h) => {
     if (h === "enables") return escape(i.enables?.length > 0 ? JSON.stringify(i.enables) : null);
+    if (h === "milestones") return escape(i.milestones?.length > 0 ? JSON.stringify(i.milestones) : null);
     return escape(i[h]);
   }).join(","));
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate", "outcomeMax", "metricName", "metricDir", "metricValue", "metricUnit", "strategicNote"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate", "milestones", "outcomeMax", "metricName", "metricDir", "metricValue", "metricUnit", "strategicNote"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -394,6 +396,8 @@ const GANTT_MIN_COL = 78;         // floor so columns stay wide & readable on sm
 const GANTT_MIN_BAR = 10;         // min bar width (px) so a 1-day item stays visible & clickable
 const GANTT_DAY_W = 34;           // day column width (px) in EXPANDED mode
 const GANTT_COARSE_W = 96;        // month/quarter/half column width (px) in EXPANDED mode
+const GANTT_MS_SIZE = 9;          // milestone diamond box (px) before the 45° rotation
+const GANTT_MS_GAP = 14;          // min px between diamond centres — closer ones nudge right
 const MONTH_QUARTER = { JAN: "Q1", FEB: "Q1", MAR: "Q1", APR: "Q2", MAY: "Q2", JUN: "Q2", JUL: "Q3", AUG: "Q3", SEP: "Q3", OCT: "Q4", NOV: "Q4", DEC: "Q4" };
 
 // Gantt timeline: split a workstream label like "AUTHENTICATION (aka FIREFLY)" into a
@@ -499,10 +503,17 @@ function buildGanttLayout(items, now, zoom, coarseW) {
     for (const seg of segments) if (abs <= seg.a + seg.days) return seg.x + (seg.w * (abs - seg.a)) / seg.days;
     return totalW;
   };
+  // Milestone diamonds ride the same pxOfDay mapping as the bars, so a marker can never drift
+  // from the bar it belongs to at any zoom level. mx is the midpoint of the milestone's day.
   const scheduled = dated.map(({ it, s, e }) => ({
     it,
     x0: pxOfDay(absDayOf(s.y, s.m, s.d)),
     x1: pxOfDay(absDayOf(e.y, e.m, e.d) + 1),
+    ms: sortMilestones((it.milestones || []).filter((m) => m && m.date)).map((m) => {
+      const p = partsOf(m.date);
+      const a = absDayOf(p.y, p.m, p.d);
+      return { ...m, mx: (pxOfDay(a) + pxOfDay(a + 1)) / 2 };
+    }),
   }));
 
   const todayAbs = absDayOf(now.getFullYear(), now.getMonth(), now.getDate());
@@ -544,6 +555,21 @@ function buildGanttLayout(items, now, zoom, coarseW) {
 
   return { scheduled, unscheduled, segments, bands, totalW, todayX, todayInRange, todayLabel,
            todayAbs, centreX, showBands: drilled.size > 0 };
+}
+
+// ---------- Milestones ----------
+// Key dates *inside* an item's timeline, drawn as diamonds on its Gantt bar and edited in the
+// item modal. Shape: { id, date, label }. Stored as null (not []) when unused so untouched items
+// stay byte-identical in backups and share links. Undated entries sort last and never draw.
+const sortMilestones = (list) =>
+  [...list].sort((a, b) => (a.date || "9999-99-99").localeCompare(b.date || "9999-99-99"));
+
+// "2026-09-22" -> "22 SEP 2026" (the milestone popover heading).
+function formatMilestoneDate(iso) {
+  if (!iso) return "No date set";
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d || m < 1 || m > 12) return iso;
+  return `${d} ${MONTHS_ABBR[m - 1]} ${y}`;
 }
 
 // "2026-06-15" -> "15 JUN" (the due-date pill). Null for empty/invalid input.
@@ -890,7 +916,22 @@ export default function RoadmapTracker() {
     return GANTT_ZOOM_DEFAULT;
   });
   const [ganttCentreTick, setGanttCentreTick] = useState(0); // bumped to re-centre on today
+  // Open milestone popover on the Gantt: which diamond, and where it sits in the viewport. Drawn in
+  // a fixed-position layer at the end of the tree, NOT inside a lane — the Gantt body is an
+  // overflow-x:auto scroller and would clip it. { msId, date, label, itemLabel, cx, cy, below }
+  const [msPop, setMsPop] = useState(null);
+  const [msSectionOpen, setMsSectionOpen] = useState(false);  // item modal's Milestones fold
+  const openMsPop = (el, item, m) => {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    setMsPop((p) => p?.msId === m.id ? null : {
+      msId: m.id, date: m.date, label: m.label, outside: m.outside,
+      itemLabel: (item.tag ? `${item.tag}: ` : "") + getItemDisplay(item).cleanText,
+      cx, cy, below: cy < 190,   // no room above → hang it under the bar instead
+    });
+  };
   const applyGanttZoom = (z, recentre) => {
+    setMsPop(null);   // columns move under it, so its anchor would go stale
     setGanttZoom(z);
     try { localStorage.setItem(GANTT_ZOOM_KEY, JSON.stringify(z)); } catch { /* ignore */ }
     if (recentre) setGanttCentreTick((t) => t + 1);
@@ -923,6 +964,7 @@ export default function RoadmapTracker() {
   // in all of them: in BY TIME it hides that row's items in every column, in BY INNOVATION TYPE and
   // BY IMPACT it folds the swim lane, and in the Gantt it bands the workstream.
   const persistCollapsedTeams = (ids) => {
+    setMsPop(null);   // lanes reflow, so any open milestone popover is now pointing at nothing
     setCollapsedTeams(ids);
     try { localStorage.setItem(TEAMS_COLLAPSE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
   };
@@ -1208,6 +1250,7 @@ export default function RoadmapTracker() {
     if (!expandedItem) return;
     setModalTab(initialModalTabRef.current || "details");
     initialModalTabRef.current = "details";
+    setMsSectionOpen(false);   // milestones start folded every time, to keep the modal calm
     const handler = (e) => { if (e.key === "Escape") setExpandedItem(null); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -1705,6 +1748,26 @@ export default function RoadmapTracker() {
     saveData({ ...data, items: newItems });
   };
 
+  // ---------- Milestone CRUD (item modal) ----------
+  // Always writes the whole list, sorted by date, and collapses an empty list back to null so
+  // items without milestones stay identical in backups, CSVs and share links.
+  const writeMilestones = (itemId, list) => {
+    const clean = sortMilestones(list).map((m) => ({ id: m.id, date: m.date || null, label: m.label || "" }));
+    updateItem(itemId, { milestones: clean.length > 0 ? clean : null });
+  };
+  const addMilestone = (item) => {
+    // Seed the date from the item's end date so a new row already sits somewhere sensible.
+    const seed = item.endDate || item.startDate || null;
+    writeMilestones(item.id, [...(item.milestones || []), { id: `ms${Date.now()}`, date: seed, label: "" }]);
+  };
+  const updateMilestone = (item, msId, patch) => {
+    writeMilestones(item.id, (item.milestones || []).map((m) => (m.id === msId ? { ...m, ...patch } : m)));
+  };
+  const deleteMilestone = (item, msId) => {
+    setMsPop(null);
+    writeMilestones(item.id, (item.milestones || []).filter((m) => m.id !== msId));
+  };
+
   const updateTitle = (newTitle) => {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
@@ -2105,6 +2168,8 @@ export default function RoadmapTracker() {
     () => buildGanttLayout(displayData.items, today, ganttZoom, ganttAnyDrilled ? GANTT_COARSE_W : ganttColW),
     [displayData.items, today, ganttZoom, ganttAnyDrilled, ganttColW]
   );
+  // Today as an ISO string, for comparing against milestone dates (solid diamond once passed).
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   // Keep `today` on the real current day. Background tabs throttle timers heavily, so also
   // re-check when the tab regains focus/visibility — otherwise a tab woken after midnight could
@@ -2155,7 +2220,8 @@ export default function RoadmapTracker() {
     if (!el) return;
     let active = false, startX = 0, startScroll = 0;
     const down = (e) => {
-      if (e.button !== 0 || e.target.closest("[data-gantt-bar]") || e.target.closest("[data-gantt-label]")) return;
+      if (e.button !== 0 || e.target.closest("[data-gantt-bar]") || e.target.closest("[data-gantt-label]")
+          || e.target.closest("[data-gantt-ms]")) return;
       active = true; startX = e.pageX; startScroll = el.scrollLeft;
       el.style.cursor = "grabbing"; el.style.userSelect = "none";
     };
@@ -2166,6 +2232,27 @@ export default function RoadmapTracker() {
     window.addEventListener("mouseup", up);
     return () => { el.removeEventListener("mousedown", down); window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
   }, [activeView]);
+
+  // Milestone popover is anchored to viewport coordinates, so anything that moves the page under it
+  // dismisses it: outside click, Esc, any scroll (incl. the Gantt's own horizontal scroll), resize.
+  useEffect(() => {
+    if (!msPop) return;
+    const close = () => setMsPop(null);
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [msPop]);
+
+  // Leaving the Gantt (or opening an item) drops any open popover.
+  useEffect(() => { setMsPop(null); }, [activeView, expandedItem]);
 
   if (loading) {
     return (
@@ -3187,13 +3274,22 @@ export default function RoadmapTracker() {
                           </div>
                         ) : teamRows.length === 0 ? (
                           <div style={{ height: 22 }} />
-                        ) : teamRows.map(({ it, x0, x1 }) => {
+                        ) : teamRows.map(({ it, x0, x1, ms }) => {
                           const { cleanText } = getItemDisplay(it);
                           // Bars are inset 2px each side. A bar too short to meet the minimum width
                           // grows *leftward* (Math.min) so its right edge always stays on the real
                           // end date — a one-day item can't spill past the today marker.
                           const width = Math.max(GANTT_MIN_BAR, x1 - x0 - 4);
                           const left = Math.min(x0 + 2, x1 - 2 - width);
+                          // Milestone diamonds: clamped inside the bar, then nudged left→right to
+                          // GANTT_MS_GAP apart so two dates a few days apart stay separately clickable.
+                          let prevX = -Infinity;
+                          const marks = ms.map((m) => {
+                            const clamped = Math.min(Math.max(m.mx, left + 5), left + width - 5);
+                            const mx = clamped < prevX + GANTT_MS_GAP ? prevX + GANTT_MS_GAP : clamped;
+                            prevX = mx;
+                            return { ...m, mx, outside: m.mx < x0 || m.mx > x1 };
+                          });
                           return (
                             <div key={it.id} className="relative" style={{ height: 34 }}>
                               <div data-gantt-bar onClick={() => setExpandedItem(it.id)} title={cleanText}
@@ -3202,6 +3298,24 @@ export default function RoadmapTracker() {
                                 <span className="truncate flex-1">{cleanText}</span>
                                 {it.tag && <span className="flex-shrink-0 text-[9px] font-mono uppercase tracking-wide text-stone-400/90">{it.tag}</span>}
                               </div>
+                              {marks.map((m) => {
+                                const past = m.date <= todayIso;
+                                const open = msPop?.msId === m.id;
+                                return (
+                                  <button key={m.id} data-gantt-ms
+                                    onClick={(e) => { e.stopPropagation(); openMsPop(e.currentTarget, it, m); }}
+                                    title={`${formatMilestoneDate(m.date)} — ${m.label || "Untitled milestone"}`}
+                                    aria-label={`Milestone ${formatMilestoneDate(m.date)}: ${m.label || "untitled"}`}
+                                    style={{
+                                      position: "absolute", zIndex: 7,
+                                      left: m.mx - GANTT_MS_SIZE / 2, top: 4 - GANTT_MS_SIZE / 2,
+                                      width: GANTT_MS_SIZE, height: GANTT_MS_SIZE, transform: "rotate(45deg)",
+                                      boxShadow: open ? "0 0 0 2px #fff, 0 0 0 3.5px rgba(68,64,60,0.35)" : "0 0 0 2px #fff",
+                                    }}
+                                    className={`border-[1.5px] cursor-pointer transition-colors ${
+                                      past ? "bg-stone-700 border-stone-700 hover:bg-stone-900" : "bg-white border-stone-700 hover:border-stone-900"}`} />
+                                );
+                              })}
                             </div>
                           );
                         })}
@@ -3220,6 +3334,7 @@ export default function RoadmapTracker() {
 
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any bar to open the item · <span className="font-bold">drag</span> the timeline to scroll · the red line marks today</span>}
+                <span><span className="font-bold">Click a ◆</span> on a bar for that milestone · add them in the item's <span className="font-bold">Milestones</span> section</span>
                 <span><span className="font-bold">Click</span> a workstream name to collapse or expand its lane</span>
                 <span><span className="font-bold">Click a month</span> in the header to show its days · click the name above them to collapse it back · <span className="font-bold">Compact</span> resets everything</span>
                 <span className="ml-auto opacity-40">{APP_VERSION}</span>
@@ -3228,6 +3343,47 @@ export default function RoadmapTracker() {
           );
         })()}
       </div>
+
+      {/* Milestone popover — fixed to the viewport and rendered outside the Gantt's scroll container
+          so it can't be clipped. Anchored on the diamond's centre with a dotted leader between the
+          two; hangs below the bar instead when there's no room above. */}
+      {msPop && (() => {
+        const HALF = 116;   // half the popover's max width, for keeping it inside the viewport
+        const GAP = 22;     // gap between diamond centre and the popover edge (the leader's span)
+        const left = Math.min(Math.max(msPop.cx, HALF + 8), window.innerWidth - HALF - 8);
+        return (
+          <>
+            <div className="fixed z-[49] pointer-events-none border-l-[1.5px] border-dashed border-stone-500"
+              style={{ left: msPop.cx, top: msPop.cy + (msPop.below ? 6 : -GAP), height: GAP - 6 }} />
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="fixed z-50 bg-white border border-stone-300 rounded-lg shadow-xl px-3 py-2.5"
+              style={{
+                left, transform: "translateX(-50%)", maxWidth: HALF * 2, minWidth: 186,
+                ...(msPop.below ? { top: msPop.cy + GAP } : { bottom: window.innerHeight - (msPop.cy - GAP) }),
+              }}
+            >
+              <button onClick={() => setMsPop(null)} title="Close"
+                className="absolute top-1 right-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded p-0.5 transition-colors">
+                <X className="w-3 h-3" />
+              </button>
+              <div className="flex items-center gap-2 pr-4">
+                <span className="w-1.5 h-1.5 flex-shrink-0 bg-stone-700" style={{ transform: "rotate(45deg)" }} />
+                <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400">{formatMilestoneDate(msPop.date)}</span>
+              </div>
+              <div className="text-xs font-semibold text-stone-900 mt-1 leading-snug">
+                {msPop.label || <span className="font-normal italic text-stone-400">Untitled milestone</span>}
+              </div>
+              {msPop.outside && (
+                <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 mt-1.5 leading-snug">
+                  Outside this item's start/end dates — pinned to the nearest end of the bar.
+                </div>
+              )}
+              <div className="text-[10px] text-stone-400 mt-1.5 pt-1.5 border-t border-stone-100 truncate">{msPop.itemLabel}</div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Live indicator for public viewers (realtime) */}
       {cloudViewId && (
@@ -3803,9 +3959,10 @@ export default function RoadmapTracker() {
                 ))}
               </div>
 
-              {/* Modal body — Details tab */}
+              {/* Modal body — Details tab. Scrolls (like the Outcome tab) because an item with a
+                  long milestone list would otherwise push the modal past the viewport. */}
               {modalTab === "details" && (
-              <div className="px-5 py-4 space-y-4">
+              <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
                 <div>
                   <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
                     Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
@@ -3846,6 +4003,66 @@ export default function RoadmapTracker() {
                     </div>
                   </div>
                 </div>
+                {/* Milestones — folded by default so the modal stays calm; the count is on the header.
+                    Rows are re-sorted by date on every write, so typing an earlier date re-orders them. */}
+                {(() => {
+                  const list = sortMilestones(modalItem.milestones || []);
+                  return (
+                    <div className="border border-stone-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setMsSectionOpen((o) => !o)}
+                        aria-expanded={msSectionOpen}
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-stone-50 hover:bg-stone-100 transition-colors text-left"
+                      >
+                        <ChevronDown className={`w-3 h-3 flex-shrink-0 text-stone-400 transition-transform ${msSectionOpen ? "" : "-rotate-90"}`} />
+                        <span className="text-[9px] font-mono font-semibold uppercase tracking-wider text-stone-500">Milestones</span>
+                        <span className="text-[9px] font-mono font-bold text-stone-700 bg-stone-200 rounded-full px-1.5 leading-[15px]">{list.length}</span>
+                        <span className="ml-auto text-[10px] text-stone-400">shown as ◆ on the Gantt bar</span>
+                      </button>
+                      {msSectionOpen && (
+                        <div className="px-3 py-2.5 border-t border-stone-200 space-y-1.5">
+                          {list.length === 0 && (
+                            <div className="text-[11px] text-stone-400 py-0.5">
+                              {isPreview ? "No milestones added" : "No milestones yet — add one to mark a key date on the bar."}
+                            </div>
+                          )}
+                          {list.map((m) => (
+                            <div key={m.id} className="flex items-center gap-2">
+                              <span className={`w-[9px] h-[9px] flex-shrink-0 border-[1.5px] border-stone-700 ${m.date && m.date <= todayIso ? "bg-stone-700" : "bg-white"}`}
+                                style={{ transform: "rotate(45deg)" }} />
+                              <input type="date" defaultValue={m.date ?? ""} disabled={isPreview}
+                                onChange={isPreview ? undefined : (e) => updateMilestone(modalItem, m.id, { date: e.target.value || null })}
+                                className={`flex-shrink-0 w-[132px] text-[11px] font-mono border border-stone-300 rounded px-1.5 py-1 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100 text-stone-500" : "bg-white"}`} />
+                              <input type="text" defaultValue={m.label || ""} readOnly={isPreview}
+                                placeholder={isPreview ? "" : "What happens on this date?"}
+                                onBlur={isPreview ? undefined : (e) => updateMilestone(modalItem, m.id, { label: e.target.value.trim() })}
+                                onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                                className={`flex-1 min-w-0 text-[11px] border border-stone-300 rounded px-2 py-1 focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`} />
+                              {!isPreview && (
+                                <button onClick={() => deleteMilestone(modalItem, m.id)} title="Remove this milestone"
+                                  className="flex-shrink-0 text-stone-400 hover:text-rose-700 hover:bg-rose-50 rounded p-1 transition-colors">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {!isPreview && (
+                            <>
+                              <button onClick={() => addMilestone(modalItem)}
+                                className="text-[10px] font-mono font-bold uppercase tracking-wider border border-dashed border-stone-300 text-stone-500 hover:border-stone-400 hover:text-stone-800 rounded-md px-2.5 py-1.5 mt-1 transition-colors">
+                                + Add milestone
+                              </button>
+                              <div className="text-[10px] text-stone-400">
+                                Kept in date order automatically · solid ◆ means the date has passed
+                                {!modalItem.startDate && !modalItem.endDate && " · set a Start/End date above to see these on the Gantt"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div>
                   <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Strategic Category</label>
                   <div className="flex flex-wrap gap-1.5">

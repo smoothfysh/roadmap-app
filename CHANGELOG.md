@@ -7,6 +7,27 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.23.0 — 2026-08-10
+
+- **Milestones on the Gantt.** Items can now carry key dates inside their timeline, drawn as small
+  diamonds straddling the top edge of the bar. Hollow while the date is still ahead, solid once it
+  has passed. Positions come from the same day→pixel mapping as the bars, so markers stay glued to
+  their bar at every zoom level.
+- **Click a diamond for its detail.** A read-only popover opens with the date, the label and the
+  item it belongs to, joined to the diamond by a dotted leader line. It's drawn in a fixed overlay
+  rather than inside the chart (the Gantt body is a horizontal scroller and would clip it), flips
+  below the bar when there's no room above, and closes on outside click, `Esc`, scroll or resize.
+- **Milestones section in the item modal.** Sits under Timeline, folded on every open with a count
+  badge. Each row is a date picker plus a text field; the list is re-sorted by date on every write.
+  Read-only previews show the list with the inputs disabled.
+- Milestones closer than 14px nudge apart so each one stays separately clickable when zoomed out,
+  and a milestone outside the item's start/end range is pinned to the nearest bar end with a note
+  saying so in its popover.
+- Collapsed workstream lanes stay plain — no diamonds on the muted summary band.
+- Milestones ride through share links, JSON backups and CSV export/import (new `milestones` column,
+  holding JSON like `enables` already does). The Details tab now scrolls so a long milestone list
+  can't push the modal off-screen.
+
 ## 4.22.0 — 2026-08-06
 
 - **Collapsed teams are now one shared setting across every view.** Collapse a team in BY TIME and
