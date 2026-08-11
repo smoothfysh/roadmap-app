@@ -7,6 +7,25 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.24.0 — 2026-08-11
+
+- **Free-form links replace the fixed JIRA/Confluence fields.** The item modal now has a
+  single **Links** section: one empty URL field by default, `+ Add link` for as many more as
+  you need. Nothing is stored until a URL is typed, and clearing a field removes that link.
+- **Badges are derived from the URL.** Paste a Jira link and the badge becomes the blue "J",
+  Confluence the "C", Miro a yellow "M" — Figma, GitHub, GitLab, Google Docs/Sheets/Slides/
+  Drive/Forms, Looker, Notion, Slack, Teams, SharePoint, OneDrive, Loom, Linear, Asana,
+  Trello, Monday, Airtable, Productboard, Amplitude, Condens, YouTube and Zoom are recognised
+  too. Anything unrecognised gets a plain chain-link badge. The list is one editable table
+  (`LINK_PROVIDERS`) near the tag colours.
+- **Cards show one plain marker.** A blue square with a white link glyph, identical whatever
+  is attached and however many — no count, no provider letter. Open the item to see the links
+  themselves. (Hover gives the count.)
+- **Old data keeps working.** Existing `jiraUrl` / `confluenceUrl` values — in localStorage,
+  backups, share links, published roadmaps, scope JSONs and CSVs — are read as links with no
+  migration step, and are folded into the new list the first time an item's links are edited.
+  CSV export gains a `links` column and still writes the two legacy columns.
+
 ## 4.23.0 — 2026-08-10
 
 - **Milestones on the Gantt.** Items can now carry key dates inside their timeline, drawn as small

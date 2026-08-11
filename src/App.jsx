@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info, Link2 } from "lucide-react";
 import { version } from "../package.json";
 import { supabase, cloudEnabled } from "./supabaseClient";
 import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
@@ -140,6 +140,9 @@ function csvToItems(csvText) {
       id: obj.id, columnId: obj.columnId, teamId: obj.teamId,
       tag: obj.tag, text: obj.text, flag: obj.flag === "" ? null : obj.flag,
       description: obj.description || null,
+      // Legacy jiraUrl/confluenceUrl columns are still read; getItemLinks folds them in
+      // when `links` is absent, so an old CSV imports with its links intact.
+      links:             (() => { try { return obj.links ? JSON.parse(obj.links) : null; } catch { return null; } })(),
       jiraUrl: obj.jiraUrl || null,
       confluenceUrl: obj.confluenceUrl || null,
       strategicCategory: obj.strategicCategory || null,
@@ -175,12 +178,13 @@ function itemsToCsv(items) {
   const rows = items.map((i) => headers.map((h) => {
     if (h === "enables") return escape(i.enables?.length > 0 ? JSON.stringify(i.enables) : null);
     if (h === "milestones") return escape(i.milestones?.length > 0 ? JSON.stringify(i.milestones) : null);
+    if (h === "links") return escape(i.links?.length > 0 ? JSON.stringify(i.links) : null);
     return escape(i[h]);
   }).join(","));
   return [headers.join(","), ...rows].join("\n");
 }
 
-const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate", "milestones", "outcomeMax", "metricName", "metricDir", "metricValue", "metricUnit", "strategicNote"];
+const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "links", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate", "milestones", "outcomeMax", "metricName", "metricDir", "metricValue", "metricUnit", "strategicNote"];
 
 function downloadCsv(items, filename = "roadmap.csv") {
   const csv = itemsToCsv(items);
@@ -711,6 +715,87 @@ function getTagStyle(tag) {
   return TAG_UNKNOWN_STYLE;
 }
 
+// ---------- Item links — provider detection + badge colours (edit freely) ----------
+// An item carries a free-form list of links: [{ id, url }]. The badge glyph and colour are
+// derived from the URL, never stored — so a pasted Jira URL shows "J", a Miro one shows a
+// yellow "M", and anything unrecognised falls back to a plain chain-link icon.
+// To add a provider: append a row below. `match(host, path)` gets a lowercased hostname
+// (with "www." stripped) and pathname. Order matters — first match wins, so put the more
+// specific rule (Confluence) above the broader one (Jira/Atlassian).
+const LINK_PROVIDERS = [
+  { id: "confluence", label: "Confluence",    glyph: "C",  bg: "#0065FF", fg: "#fff", match: (h, p) => (h.endsWith("atlassian.net") && p.startsWith("/wiki")) || h.startsWith("confluence.") },
+  { id: "jira",       label: "Jira",          glyph: "J",  bg: "#0052CC", fg: "#fff", match: (h) => h.endsWith("atlassian.net") || h.startsWith("jira.") },
+  { id: "gsheets",    label: "Google Sheets", glyph: "S",  bg: "#0F9D58", fg: "#fff", match: (h, p) => h === "docs.google.com" && p.startsWith("/spreadsheets") },
+  { id: "gslides",    label: "Google Slides", glyph: "P",  bg: "#F4B400", fg: "#1a1a1a", match: (h, p) => h === "docs.google.com" && p.startsWith("/presentation") },
+  { id: "gforms",     label: "Google Forms",  glyph: "Fo", bg: "#7248B9", fg: "#fff", match: (h, p) => h === "docs.google.com" && p.startsWith("/forms") },
+  { id: "gdocs",      label: "Google Docs",   glyph: "D",  bg: "#4285F4", fg: "#fff", match: (h) => h === "docs.google.com" },
+  { id: "gdrive",     label: "Google Drive",  glyph: "Dr", bg: "#1A73E8", fg: "#fff", match: (h) => h === "drive.google.com" },
+  { id: "looker",     label: "Looker Studio", glyph: "Lk", bg: "#4285F4", fg: "#fff", match: (h) => h.includes("lookerstudio.google.com") || h.endsWith("looker.com") },
+  { id: "miro",       label: "Miro",          glyph: "M",  bg: "#FFD02F", fg: "#050038", match: (h) => h.endsWith("miro.com") },
+  { id: "figma",      label: "Figma",         glyph: "F",  bg: "#F24E1E", fg: "#fff", match: (h) => h.endsWith("figma.com") },
+  { id: "notion",     label: "Notion",        glyph: "N",  bg: "#191919", fg: "#fff", match: (h) => h.endsWith("notion.so") || h.endsWith("notion.site") },
+  { id: "github",     label: "GitHub",        glyph: "G",  bg: "#24292F", fg: "#fff", match: (h) => h.endsWith("github.com") || h.endsWith("github.io") },
+  { id: "gitlab",     label: "GitLab",        glyph: "GL", bg: "#FC6D26", fg: "#fff", match: (h) => h.endsWith("gitlab.com") },
+  { id: "slack",      label: "Slack",         glyph: "Sl", bg: "#4A154B", fg: "#fff", match: (h) => h.endsWith("slack.com") },
+  { id: "teams",      label: "MS Teams",      glyph: "T",  bg: "#6264A7", fg: "#fff", match: (h) => h.endsWith("teams.microsoft.com") },
+  { id: "sharepoint", label: "SharePoint",    glyph: "SP", bg: "#038387", fg: "#fff", match: (h) => h.includes("sharepoint.com") },
+  { id: "onedrive",   label: "OneDrive",      glyph: "OD", bg: "#0078D4", fg: "#fff", match: (h) => h.endsWith("onedrive.live.com") || h.endsWith("1drv.ms") },
+  { id: "loom",       label: "Loom",          glyph: "L",  bg: "#625DF5", fg: "#fff", match: (h) => h.endsWith("loom.com") },
+  { id: "linear",     label: "Linear",        glyph: "Li", bg: "#5E6AD2", fg: "#fff", match: (h) => h.endsWith("linear.app") },
+  { id: "asana",      label: "Asana",         glyph: "As", bg: "#F06A6A", fg: "#fff", match: (h) => h.endsWith("asana.com") },
+  { id: "trello",     label: "Trello",        glyph: "Tr", bg: "#0079BF", fg: "#fff", match: (h) => h.endsWith("trello.com") },
+  { id: "monday",     label: "Monday",        glyph: "Mo", bg: "#FF3D57", fg: "#fff", match: (h) => h.endsWith("monday.com") },
+  { id: "airtable",   label: "Airtable",      glyph: "A",  bg: "#18BFFF", fg: "#fff", match: (h) => h.endsWith("airtable.com") },
+  { id: "productbrd", label: "Productboard",  glyph: "Pb", bg: "#FF2638", fg: "#fff", match: (h) => h.endsWith("productboard.com") },
+  { id: "amplitude",  label: "Amplitude",     glyph: "Am", bg: "#1E61F0", fg: "#fff", match: (h) => h.endsWith("amplitude.com") },
+  { id: "condens",    label: "Condens",       glyph: "Cn", bg: "#2C3E9E", fg: "#fff", match: (h) => h.endsWith("condens.io") },
+  { id: "youtube",    label: "YouTube",       glyph: "Y",  bg: "#FF0000", fg: "#fff", match: (h) => h.endsWith("youtube.com") || h === "youtu.be" },
+  { id: "zoom",       label: "Zoom",          glyph: "Z",  bg: "#2D8CFF", fg: "#fff", match: (h) => h.endsWith("zoom.us") },
+];
+// Fallback for anything unmatched — rendered as a chain-link glyph, not a letter.
+const LINK_GENERIC = { id: "link", label: "Link", glyph: null, bg: "#78716c", fg: "#fff" };
+// -----------------------------------------------------------------------------------
+
+// URL string -> provider row (or the generic fallback). Tolerates a missing scheme.
+function detectLinkProvider(url) {
+  if (!url) return LINK_GENERIC;
+  let host, path;
+  try {
+    const u = new URL(/^[a-z]+:\/\//i.test(url) ? url : `https://${url}`);
+    host = u.hostname.toLowerCase().replace(/^www\./, "");
+    path = u.pathname.toLowerCase();
+  } catch { return LINK_GENERIC; }
+  return LINK_PROVIDERS.find((p) => p.match(host, path)) || LINK_GENERIC;
+}
+
+// An item's links, normalised. Reads the modern `links` array; falls back to the legacy
+// jiraUrl / confluenceUrl pair so old backups, share links and published JSONs still render.
+// Nothing is rewritten on read — the legacy fields are only dropped once links are edited.
+function getItemLinks(item) {
+  if (Array.isArray(item?.links)) return item.links.filter((l) => l && l.url);
+  const out = [];
+  if (item?.jiraUrl) out.push({ id: "lk_jira", url: item.jiraUrl });
+  if (item?.confluenceUrl) out.push({ id: "lk_conf", url: item.confluenceUrl });
+  return out;
+}
+
+// Row id for an as-yet-unsaved link field in the modal. Never persisted.
+let blankLinkSeq = 0;
+const nextBlankLinkId = () => `blank${++blankLinkSeq}`;
+
+// The small square badge shown for one link — provider letter, or a chain-link glyph.
+function LinkBadge({ url, size = "w-4 h-4" }) {
+  const p = detectLinkProvider(url);
+  return (
+    <span
+      className={`${size} rounded flex-shrink-0 flex items-center justify-center font-bold text-[8px] leading-none`}
+      style={{ backgroundColor: p.bg, color: p.fg }}
+    >
+      {p.glyph || <Link2 className="w-2.5 h-2.5" strokeWidth={2.5} />}
+    </span>
+  );
+}
+
 // ---------- Tag extraction from item title ----------
 // Recognises prefixes like "FR: title", "DE: title", "FR/DE: title"
 // Country codes must be 2–3 uppercase letters; combinations separated by /
@@ -921,6 +1006,10 @@ export default function RoadmapTracker() {
   // overflow-x:auto scroller and would clip it. { msId, date, label, itemLabel, cx, cy, below }
   const [msPop, setMsPop] = useState(null);
   const [msSectionOpen, setMsSectionOpen] = useState(false);  // item modal's Milestones fold
+  // Empty link rows in the item modal, as a list of throwaway row ids (not a count — stable
+  // keys keep a half-typed row from being unmounted when a sibling row commits). UI-only:
+  // a row is persisted the moment a URL is typed into it, never before.
+  const [blankLinks, setBlankLinks] = useState([]);
   const openMsPop = (el, item, m) => {
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
@@ -1251,6 +1340,9 @@ export default function RoadmapTracker() {
     setModalTab(initialModalTabRef.current || "details");
     initialModalTabRef.current = "details";
     setMsSectionOpen(false);   // milestones start folded every time, to keep the modal calm
+    // One empty link row by default, so adding the first link needs no extra click.
+    const opened = (sharedPreview ?? data).items.find((i) => i.id === expandedItem);
+    setBlankLinks(opened && getItemLinks(opened).length > 0 ? [] : [nextBlankLinkId()]);
     const handler = (e) => { if (e.key === "Escape") setExpandedItem(null); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -1768,6 +1860,34 @@ export default function RoadmapTracker() {
     writeMilestones(item.id, (item.milestones || []).filter((m) => m.id !== msId));
   };
 
+  // ---------- Link CRUD (item modal) ----------
+  // Writes the whole list and collapses an empty one back to null. Any legacy jiraUrl /
+  // confluenceUrl on the item is cleared in the same write — getItemLinks has already folded
+  // them into the list, so keeping them would duplicate the link on the next read.
+  const writeLinks = (itemId, list) => {
+    const clean = list.filter((l) => l.url && l.url.trim()).map((l) => ({ id: l.id, url: l.url.trim() }));
+    const item = data.items.find((i) => i.id === itemId);
+    const patch = { links: clean.length > 0 ? clean : null };
+    if (item?.jiraUrl) patch.jiraUrl = null;              // only touched when actually present,
+    if (item?.confluenceUrl) patch.confluenceUrl = null;  // so untouched items stay byte-identical
+    updateItem(itemId, patch);
+  };
+  // Empty rows live in UI state only (blankLinks) — nothing is stored until a URL is typed,
+  // so an item never carries a half-filled link into a backup or share link.
+  const updateLink = (item, linkId, url) => {
+    const list = getItemLinks(item);
+    if (list.some((l) => l.id === linkId)) {
+      writeLinks(item.id, url ? list.map((l) => (l.id === linkId ? { ...l, url } : l))
+                              : list.filter((l) => l.id !== linkId));   // cleared field = removed
+    } else if (url) {
+      writeLinks(item.id, [...list, { id: `lk${Date.now()}`, url }]);   // a blank row grew a URL
+      setBlankLinks((rows) => rows.filter((r) => r !== linkId));
+    }
+  };
+  const deleteLink = (item, linkId) => {
+    writeLinks(item.id, getItemLinks(item).filter((l) => l.id !== linkId));
+  };
+
   const updateTitle = (newTitle) => {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
@@ -2016,30 +2136,20 @@ export default function RoadmapTracker() {
                   {item.description && !isExpanded && (
                     <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-stone-400" title="Has notes" />
                   )}
-                  {/* JIRA badge */}
-                  {item.jiraUrl && (
-                    <a
-                      href={item.jiraUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-white font-bold text-[8px] hover:opacity-75 transition-opacity"
-                      style={{ backgroundColor: "#0052CC" }}
-                      title={`JIRA: ${item.jiraUrl}`}
-                    >J</a>
-                  )}
-                  {/* Confluence badge */}
-                  {item.confluenceUrl && (
-                    <a
-                      href={item.confluenceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-white font-bold text-[8px] hover:opacity-75 transition-opacity"
-                      style={{ backgroundColor: "#0065FF" }}
-                      title={`Confluence: ${item.confluenceUrl}`}
-                    >C</a>
-                  )}
+                  {/* Links — a plain "has links" marker, deliberately identical for every item:
+                      no count, no provider glyph. The per-provider badges live in the modal. */}
+                  {(() => {
+                    const count = getItemLinks(item).length;
+                    if (count === 0) return null;
+                    return (
+                      <span
+                        className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center bg-blue-600 text-white"
+                        title={count === 1 ? "1 link" : `${count} links`}
+                      >
+                        <Link2 className="w-2.5 h-2.5" strokeWidth={2.5} />
+                      </span>
+                    );
+                  })()}
                   <div className="relative flex-shrink-0">
                     <button
                       onClick={!isPreview ? (e) => { e.stopPropagation(); setFlagPickerOpen(flagPickerOpen === item.id ? null : item.id); } : (e) => e.stopPropagation()}
@@ -4092,40 +4202,74 @@ export default function RoadmapTracker() {
                     className={`w-full text-xs border border-stone-300 rounded px-2 py-1 resize-none focus:outline-none focus:border-stone-500 ${isPreview ? "bg-stone-100" : "bg-white"}`}
                   />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0052CC" }}>J</span>
-                    <input
-                      type="url"
-                      defaultValue={modalItem.jiraUrl || ""}
-                      readOnly={isPreview}
-                      onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { jiraUrl: e.target.value.trim() || null })}
-                      placeholder="JIRA issue URL"
-                      className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
-                    />
-                    {modalItem.jiraUrl && (
-                      <a href={modalItem.jiraUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-white font-bold text-[8px]" style={{ backgroundColor: "#0065FF" }}>C</span>
-                    <input
-                      type="url"
-                      defaultValue={modalItem.confluenceUrl || ""}
-                      readOnly={isPreview}
-                      onBlur={isPreview ? undefined : (e) => updateItem(modalItem.id, { confluenceUrl: e.target.value.trim() || null })}
-                      placeholder="Confluence page URL"
-                      className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
-                    />
-                    {modalItem.confluenceUrl && (
-                      <a href={modalItem.confluenceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
+                {/* Links — one free-form row per link. The badge is derived from the URL as you
+                    type (Jira → J, Confluence → C, Miro → yellow M, …), never chosen by hand.
+                    A single empty row stands in when there are none; "+ Add link" adds more. */}
+                {(() => {
+                  const list = getItemLinks(modalItem);
+                  const blanks = isPreview ? [] : blankLinks;
+                  return (
+                    <div>
+                      <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
+                        Links {list.length > 0 && <span className="text-stone-500">({list.length})</span>}
+                      </label>
+                      {isPreview && list.length === 0 && (
+                        <div className="text-[11px] text-stone-400 py-0.5">No links added</div>
+                      )}
+                      <div className="space-y-2">
+                        {list.map((l) => (
+                          <div key={l.id} className="flex items-center gap-2">
+                            <LinkBadge url={l.url} />
+                            <input
+                              type="url"
+                              defaultValue={l.url}
+                              readOnly={isPreview}
+                              onBlur={isPreview ? undefined : (e) => updateLink(modalItem, l.id, e.target.value.trim())}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                              placeholder="Paste a URL"
+                              title={`${detectLinkProvider(l.url).label}: ${l.url}`}
+                              className={`flex-1 text-xs border border-stone-300 rounded px-2 py-1 focus:outline-none focus:border-stone-500 min-w-0 ${isPreview ? "bg-stone-100" : "bg-white"}`}
+                            />
+                            <a href={l.url} target="_blank" rel="noopener noreferrer" title="Open in a new tab" className="flex-shrink-0 text-stone-400 hover:text-stone-700">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                            {!isPreview && (
+                              <button onClick={() => deleteLink(modalItem, l.id)} title="Remove this link"
+                                className="flex-shrink-0 text-stone-400 hover:text-rose-700 hover:bg-rose-50 rounded p-1 transition-colors">
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {blanks.map((rowId, n) => (
+                          <div key={rowId} className="flex items-center gap-2">
+                            <LinkBadge url="" />
+                            <input
+                              type="url"
+                              defaultValue=""
+                              onBlur={(e) => updateLink(modalItem, rowId, e.target.value.trim())}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                              placeholder="Paste a URL — Jira, Confluence, Miro, Figma, Docs…"
+                              className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 bg-white focus:outline-none focus:border-stone-500 min-w-0"
+                            />
+                            {(n > 0 || list.length > 0) && (
+                              <button onClick={() => setBlankLinks((rows) => rows.filter((r) => r !== rowId))} title="Remove this row"
+                                className="flex-shrink-0 text-stone-400 hover:text-rose-700 hover:bg-rose-50 rounded p-1 transition-colors">
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {!isPreview && (
+                        <button onClick={() => setBlankLinks((rows) => [...rows, nextBlankLinkId()])}
+                          className="text-[10px] font-mono font-bold uppercase tracking-wider border border-dashed border-stone-300 text-stone-500 hover:border-stone-400 hover:text-stone-800 rounded-md px-2.5 py-1.5 mt-2 transition-colors">
+                          + Add link
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               )}{/* end details tab */}
 

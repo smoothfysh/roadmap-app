@@ -56,7 +56,8 @@ Everything is in `src/App.jsx`. Key sections (in file order):
   title: string,
   columns: [{ id, title, subtitle, color }],
   teams:   [{ id, name }],
-  items:   [{ id, columnId, teamId, tag, text, flag, description, jiraUrl, confluenceUrl,
+  items:   [{ id, columnId, teamId, tag, text, flag, description,
+              links: [{ id, url }] | null,          // jiraUrl / confluenceUrl are legacy, read-only
               startDate, endDate, milestones: [{ id, date, label }] | null }]
 }
 ```
@@ -71,6 +72,7 @@ Stored in `localStorage` under key `roadmap-data` (or `roadmap-data-{scope}` for
 - **Date pills**: Date-like suffixes (e.g. `- Mid APR`, `Q2 2026`) are stripped from display text and shown as a separate pill badge.
 - **Expand/collapse**: Clicking an item expands it to show/edit description, JIRA URL, and Confluence URL. Only one item open at a time.
 - **Gantt milestones**: `item.milestones` (null when unused) draws diamonds straddling the top edge of the item's bar — hollow while the date is ahead, solid once passed. Positions come from `buildGanttLayout`'s `pxOfDay`, so they can't drift from the bar. Clicking one opens a read-only popover; it is rendered in a **fixed-position overlay outside the Gantt's `overflow-x-auto` body** (drawing it inside a lane gets it clipped) and dismisses on outside click, `Esc`, scroll or resize. Entry is the collapsible **Milestones** section in the item modal, under Timeline, folded on every open. Always write via `writeMilestones` — it sorts by date and collapses an empty list to `null`.
+- **Item links**: `item.links` (null when unused) is a free-form list of `{ id, url }`. The badge glyph and colour are **derived from the URL** by `detectLinkProvider` against the `LINK_PROVIDERS` table (first match wins — keep Confluence above Jira), never stored, so the same URL always renders the same badge. Unrecognised hosts get a chain-link badge. Always write via `writeLinks` — it drops empty rows, collapses an empty list to `null`, and clears any legacy `jiraUrl`/`confluenceUrl` it folded in. Read via `getItemLinks`, which is what makes old data (localStorage, backups, share links, published roadmaps, scope JSONs, CSVs) render without a migration pass. Empty modal rows are UI state (`blankLinks`, keyed by throwaway id) and are never persisted. Cards show a single **generic** marker — blue square, white chain-link glyph, no count and no provider letter, identical for every item that has links (the user asked for this explicitly). Provider badges appear only in the modal.
 - **Drag-and-drop**: HTML5 native drag; dragging is disabled while an item is expanded.
 - **Migration**: `useEffect` repairs stale `localStorage` data on load (colour renames, orphan team IDs from old CSV imports).
 - **Reset**: Always resets to blank `seedData` — does not restore any previous file.
