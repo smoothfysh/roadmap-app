@@ -1,8 +1,14 @@
 -- ============================================================
 -- Roadmap App — Supabase Phase 0 schema (no-login, capability-key model)
 --
--- WHAT TO DO: open your Supabase project → SQL Editor → New query →
+-- WHAT TO DO (new project): open your Supabase project → SQL Editor → New query →
 -- paste this ENTIRE file → click RUN. That's it.
+--
+-- EXISTING project already running the pre-4.25.0 schema: this file is the same
+-- end state, but running it revokes the public read immediately, which breaks any
+-- browser tab still on an older bundle. For a no-downtime rollout use the two
+-- migration files instead — migrate-01-published-read-rpc.sql, then deploy the
+-- app, then migrate-02-revoke-public-read.sql.
 --
 -- Safe to run more than once (idempotent).
 -- ============================================================
@@ -34,20 +40,20 @@ create table if not exists public.roadmap_published (
 alter table public.roadmap_working   enable row level security;
 alter table public.roadmap_published enable row level security;
 
--- WORKING table: no policies at all => zero direct access for the public.
--- Everything goes through the SECURITY DEFINER functions below (which check the key).
-
--- PUBLISHED table: anyone may READ (that's how sharing works); nobody may write directly.
+-- NEITHER table grants direct access to anyone. Both have RLS on with no policies,
+-- so every read and write goes through the SECURITY DEFINER functions below, which
+-- each require a capability: the secret edit key for the working copy, or the
+-- unguessable id for the published copy.
+--
+-- The published table used to carry `for select using (true)` + `grant select to anon`.
+-- Do not put that back. PostgREST does not require a filter, so a blanket select
+-- policy makes the table a dumpable public collection:
+--     GET /rest/v1/roadmap_published?select=data   ->   every roadmap, no id needed.
+-- The anon key is public by design (it ships in the JS bundle), so that was readable
+-- by anyone who loaded the site. Reads now go through get_published() instead.
 drop policy if exists "public read published" on public.roadmap_published;
-create policy "public read published"
-  on public.roadmap_published for select
-  using (true);
-
--- Explicit table-level grant for the public role, so this works even if the project's
--- "Automatically expose new tables" setting is OFF (the recommended, more-secure choice).
--- The WORKING table is deliberately NOT granted to anyone — it's reached only via the
--- SECURITY DEFINER functions below.
-grant select on public.roadmap_published to anon;
+revoke select on public.roadmap_published from anon;
+revoke select on public.roadmap_published from authenticated;
 
 -- 4. Functions (RPCs) — run with owner rights, so they bypass RLS -------
 
@@ -111,20 +117,69 @@ begin
 end;
 $$;
 
+-- Read the published copy. The id IS the capability: this returns at most one row
+-- and has no unfiltered form, so there is nothing to enumerate. `language sql`
+-- (not plpgsql) avoids output-name/column ambiguity on `data`; `stable` lets
+-- PostgREST serve it over GET.
+create or replace function public.get_published(p_id text)
+returns table(data jsonb, published_at timestamptz)
+language sql security definer stable set search_path = public
+as $$
+  select r.data, r.published_at
+    from public.roadmap_published r
+   where r.id = p_id;
+$$;
+
 -- 5. Allow the public (anon) role to call the functions ------
 grant execute on function public.create_roadmap(jsonb, text)          to anon;
 grant execute on function public.load_working(text, text)             to anon;
 grant execute on function public.save_working(text, text, jsonb, text) to anon;
 grant execute on function public.publish(text, text)                  to anon;
+grant execute on function public.get_published(text)                  to anon;
 
--- 6. Enable Realtime on the published table (guarded so re-runs don't error)
+-- 6. Realtime — broadcast, NOT Postgres Changes --------------
+--
+-- Postgres Changes evaluates RLS as the `anon` role, so it would require a table
+-- select grant — and any table anon can subscribe to is a table anon can dump.
+-- Broadcast has no such coupling: delivery is keyed on the topic string, and the
+-- topic carries the unguessable id.
+--
+-- The payload is a SIGNAL ONLY (no roadmap data): broadcast messages are
+-- size-capped and a large roadmap would not fit. The client re-reads through
+-- get_published() when a signal arrives.
+create or replace function public.broadcast_published()
+returns trigger
+language plpgsql security definer set search_path = public, realtime
+as $$
+begin
+  begin
+    perform realtime.send(
+      jsonb_build_object('id', new.id, 'published_at', new.published_at),
+      'published',                  -- event
+      'published:' || new.id,       -- topic
+      false                         -- public topic: no RLS check, nothing to enumerate
+    );
+  exception when others then
+    -- Never let a notification failure roll back an actual publish.
+    raise warning 'broadcast_published failed for %: %', new.id, sqlerrm;
+  end;
+  return null;                      -- AFTER trigger: return value is ignored
+end;
+$$;
+
+drop trigger if exists trg_broadcast_published on public.roadmap_published;
+create trigger trg_broadcast_published
+  after insert or update on public.roadmap_published
+  for each row execute function public.broadcast_published();
+
+-- Remove the old Postgres Changes replication if an earlier run added it.
 do $$
 begin
-  if not exists (
+  if exists (
     select 1 from pg_publication_tables
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'roadmap_published'
   ) then
-    alter publication supabase_realtime add table public.roadmap_published;
+    alter publication supabase_realtime drop table public.roadmap_published;
   end if;
 end $$;
 

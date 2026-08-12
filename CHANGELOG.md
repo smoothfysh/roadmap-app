@@ -7,6 +7,30 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.25.0 — 2026-08-12
+
+- **Security fix: the published-roadmap table could be dumped by anyone.**
+  `roadmap_published` granted `select` to the `anon` role with an RLS policy of
+  `using (true)`. PostgREST doesn't require a filter, so
+  `GET /rest/v1/roadmap_published?select=data` returned **every** published roadmap — no id
+  needed. The anon key is public by design (it ships in the JS bundle), so this was open to
+  anyone who loaded the site. Reported by internal security review.
+- **Reads now go through a capability-checked function.** The policy and grant are gone;
+  `roadmap_published` has RLS on with no policies, matching `roadmap_working`. The new
+  `get_published(p_id)` (SECURITY DEFINER, `stable`) returns at most one row and has no
+  unfiltered form, so the unguessable `r_<16 hex>` id is once again the only way in.
+- **Live updates switched from Postgres Changes to Broadcast.** Postgres Changes evaluates
+  RLS as `anon` and so requires exactly the table grant that was removed — and any table
+  anon can subscribe to is a table anon can dump. A trigger now broadcasts to topic
+  `published:<id>`; the viewer subscribes to that topic and re-reads via `get_published`.
+  The payload is a signal only, so large roadmaps can't exceed the broadcast size cap. The
+  "Live — updates automatically" indicator behaves exactly as before.
+- **Rollout is two SQL steps around the deploy** so no viewer sees a broken roadmap:
+  `supabase/migrate-01-published-read-rpc.sql` (additive), then deploy, then
+  `supabase/migrate-02-revoke-public-read.sql` (breaking). `phase0-schema.sql` is updated to
+  the same end state for fresh projects — re-running the old copy would reopen the hole.
+- No change to `#share=` links, Backup/import, or any local-only behaviour.
+
 ## 4.24.0 — 2026-08-11
 
 - **Free-form links replace the fixed JIRA/Confluence fields.** The item modal now has a

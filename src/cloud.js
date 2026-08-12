@@ -72,18 +72,21 @@ export async function publishRoadmap(id, key) {
 // Read the PUBLIC published row by id (no key) — the data plus the server-issued
 // published_at stamp. Returns null if the roadmap has never been published.
 //
+// Goes through the get_published RPC, NOT a table select. The published table grants
+// anon nothing: a blanket select policy would make it a dumpable public collection,
+// because PostgREST happily answers an unfiltered request (`?select=data` with no id
+// returned every roadmap). The RPC takes the id as a required argument and returns at
+// most one row, so the unguessable id stays the capability it was meant to be.
+//
 // published_at comes from Postgres now(), so two reads of it are always on the SAME
 // clock. That's what makes the pre-publish freshness check exact: we compare a stamp
 // the server gave us earlier against a stamp the server gives us now — never against
 // this machine's clock, which may have drifted.
 export async function loadPublishedRow(id) {
-  const { data, error } = await supabase
-    .from("roadmap_published")
-    .select("data, published_at")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: rows, error } = await supabase.rpc("get_published", { p_id: id });
   if (error) throw error;
-  return data ? { data: data.data, publishedAt: data.published_at } : null;
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  return row ? { data: row.data, publishedAt: row.published_at } : null;
 }
 
 // Read the PUBLIC published copy by id (no key). Returns the data object, or null if

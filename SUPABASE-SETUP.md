@@ -30,9 +30,14 @@ At the end you'll hand me **two values** (Project URL + anon key) and I'll wire 
    and paste it into the editor.
 4. Click **Run** (or press Ctrl/Cmd + Enter).
 5. You should see **"Success. No rows returned."** — that's correct. This created the two
-   tables, the security rules, the four functions, and turned on realtime.
+   tables, the security rules, the five functions, and turned on realtime.
 
 _(If you ever change the script, just paste and Run again — it's safe to re-run.)_
+
+⚠️ If your project already ran the **pre-4.25.0** version of this script, don't just re-run
+it — that revokes the public read instantly and breaks any browser tab still on an older
+bundle. Run `supabase/migrate-01-published-read-rpc.sql`, deploy the app, then run
+`supabase/migrate-02-revoke-public-read.sql`.
 
 ## Step 4 — Copy your two API values
 
@@ -45,6 +50,11 @@ _(If you ever change the script, just paste and Run again — it's safe to re-ru
 admin master key — **never** put it in the app, never send it to anyone, never commit it.
 We only use the **anon public** key, which is designed to be shared publicly (our database
 rules + functions are what keep data safe).
+
+That last point only holds if no table grants `anon` direct access. The anon key is
+readable by anyone who loads the site, so a table with a `for select using (true)` policy
+is a table anyone can dump — PostgREST answers unfiltered requests. Reads go through the
+`get_published` / `load_working` functions instead, each of which requires a capability.
 
 ## Step 5 — (optional) Confirm it works
 

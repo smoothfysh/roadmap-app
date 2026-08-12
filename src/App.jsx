@@ -1404,27 +1404,35 @@ export default function RoadmapTracker() {
     return () => window.removeEventListener("keydown", handler);
   }, [sharedPreview, undoStack]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Realtime: when viewing a published roadmap (?id=), subscribe to its published row so the
-  // board updates live the moment the owner publishes — no refresh needed.
+  // Realtime: when viewing a published roadmap (?id=), subscribe to its broadcast topic so
+  // the board updates live the moment the owner publishes — no refresh needed.
+  //
+  // Broadcast, not Postgres Changes: the latter evaluates RLS as the `anon` role, so it
+  // needs a table select grant on roadmap_published — and any table anon can subscribe to
+  // is a table anon can dump over the REST API. The topic name carries the unguessable id,
+  // which keeps the capability model intact with no read grant at all.
+  //
+  // The broadcast is only a SIGNAL — messages are size-capped and a large roadmap wouldn't
+  // fit — so we re-read through get_published() whenever one lands.
   useEffect(() => {
     if (!cloudViewId || !supabase) return;
     setCloudLive(false);
+    let cancelled = false;
     const channel = supabase
       .channel(`published:${cloudViewId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "roadmap_published", filter: `id=eq.${cloudViewId}` },
-        (payload) => {
-          const next = payload?.new?.data;
-          if (next?.columns && next?.teams && next?.items) {
-            if (!next.title) next.title = seedData.title;
-            setData(next);
-            setSharedPreview(next);
-          }
+      .on("broadcast", { event: "published" }, async () => {
+        try {
+          const next = await loadPublished(cloudViewId);
+          if (cancelled || !next?.columns || !next?.teams || !next?.items) return;
+          if (!next.title) next.title = seedData.title;
+          setData(next);
+          setSharedPreview(next);
+        } catch (e) {
+          console.error("Live refresh failed:", e);
         }
-      )
-      .subscribe((status) => setCloudLive(status === "SUBSCRIBED"));
-    return () => { supabase.removeChannel(channel); setCloudLive(false); };
+      })
+      .subscribe((status) => { if (!cancelled) setCloudLive(status === "SUBSCRIBED"); });
+    return () => { cancelled = true; supabase.removeChannel(channel); setCloudLive(false); };
   }, [cloudViewId]);
 
   // Save to localStorage on change
