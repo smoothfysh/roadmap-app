@@ -2,7 +2,9 @@
 
 ## Project overview
 
-Single-file React kanban board for sharing team roadmaps. All application logic lives in `src/App.jsx`. No backend — data persists in `localStorage` only.
+Single-file React kanban board for sharing team roadmaps. All application logic lives in `src/App.jsx`.
+
+Storage is `localStorage` by default. There is also an **optional Supabase cloud sync** (`src/cloud.js`, `src/supabaseClient.js`) for roadmaps shared by link — see **Supabase cloud sync** below. The app degrades to local-only when the env vars are absent, so most work never touches it.
 
 Deployed to GitHub Pages at `roadmap.cadence-x.com` (CNAME in `public/CNAME`).
 
@@ -36,7 +38,9 @@ The user has explicitly asked for these — always obey:
 
 ## Architecture
 
-Everything is in `src/App.jsx`. Key sections (in file order):
+Three source files: `src/App.jsx` (everything the user sees), plus `src/cloud.js` (Supabase RPC wrappers, link builders, the local "My roadmaps" list) and `src/supabaseClient.js` (client construction from env vars).
+
+`src/App.jsx` key sections (in file order):
 
 | Section | What it does |
 |---|---|
@@ -70,12 +74,43 @@ Stored in `localStorage` under key `roadmap-data` (or `roadmap-data-{scope}` for
 - **Named scopes**: `?scope=name` fetches `/name.json` from the public folder and shows it as a read-only preview. If the file doesn't exist, an error screen is shown. To publish a scope: click **Backup**, rename the file to `<scope>.json`, drop it in `public/`, and deploy. Personal saved copies (via "Save & open" in the share banner) are stored in `localStorage` with a `_savedCopy` marker and load even when no matching JSON file exists.
 - **Tag auto-detection**: Titles prefixed `FR: …`, `DE/AT: …` etc. split into `tag` + `text` at save time. Country badge colours are in the `TAG_STYLES` constant — easy to extend.
 - **Date pills**: Date-like suffixes (e.g. `- Mid APR`, `Q2 2026`) are stripped from display text and shown as a separate pill badge.
-- **Expand/collapse**: Clicking an item expands it to show/edit description, JIRA URL, and Confluence URL. Only one item open at a time.
+- **Expand/collapse**: Clicking an item expands it to show/edit its description and links. Only one item open at a time.
 - **Gantt milestones**: `item.milestones` (null when unused) draws diamonds straddling the top edge of the item's bar — hollow while the date is ahead, solid once passed. Positions come from `buildGanttLayout`'s `pxOfDay`, so they can't drift from the bar. Clicking one opens a read-only popover; it is rendered in a **fixed-position overlay outside the Gantt's `overflow-x-auto` body** (drawing it inside a lane gets it clipped) and dismisses on outside click, `Esc`, scroll or resize. Entry is the collapsible **Milestones** section in the item modal, under Timeline, folded on every open. Always write via `writeMilestones` — it sorts by date and collapses an empty list to `null`.
 - **Item links**: `item.links` (null when unused) is a free-form list of `{ id, url }`. The badge glyph and colour are **derived from the URL** by `detectLinkProvider` against the `LINK_PROVIDERS` table (first match wins — keep Confluence above Jira), never stored, so the same URL always renders the same badge. Unrecognised hosts get a chain-link badge. Always write via `writeLinks` — it drops empty rows, collapses an empty list to `null`, and clears any legacy `jiraUrl`/`confluenceUrl` it folded in. Read via `getItemLinks`, which is what makes old data (localStorage, backups, share links, published roadmaps, scope JSONs, CSVs) render without a migration pass. Empty modal rows are UI state (`blankLinks`, keyed by throwaway id) and are never persisted. Cards show a single **generic** marker — blue square, white chain-link glyph, no count and no provider letter, identical for every item that has links (the user asked for this explicitly). Provider badges appear only in the modal.
+- **Cloud roadmaps**: `?id=…&key=…` edits a Supabase-backed roadmap (debounced auto-save, cached per-roadmap in `localStorage` under `roadmap-cloud-{id}`); `?id=…` alone is a read-only view of the published copy that live-updates when the owner publishes. Independent of `#share=` links and `?scope=`. See **Supabase cloud sync**.
 - **Drag-and-drop**: HTML5 native drag; dragging is disabled while an item is expanded.
 - **Migration**: `useEffect` repairs stale `localStorage` data on load (colour renames, orphan team IDs from old CSV imports).
 - **Reset**: Always resets to blank `seedData` — does not restore any previous file.
+
+## Supabase cloud sync
+
+Optional, no-login, **capability-key** model — there are no user accounts. Schema lives in `supabase/phase0-schema.sql` (the canonical end state; paste-and-run in the SQL Editor, idempotent). Setup walkthrough is `SUPABASE-SETUP.md`; the design rationale is `SPEC-supabase-sync.md`.
+
+Two tables, two secrets:
+
+| Table | Holds | Capability required |
+|---|---|---|
+| `roadmap_working` | private draft, auto-saved as you edit | secret **edit key** — 24 random bytes, stored only as a bcrypt hash, returned in raw form exactly once at creation |
+| `roadmap_published` | the copy viewers see | the **id** — `r_` + 16 hex, 64 bits of entropy |
+
+URLs: `?id=…&key=…` opens the editable working copy; `?id=…` alone opens the read-only published copy.
+
+### Security model — read this before touching any policy or grant
+
+**Neither table grants any direct access to any role.** Both have RLS enabled with **no policies at all**. Every read and write goes through a `SECURITY DEFINER` function that checks a capability: `create_roadmap`, `load_working`, `save_working`, `publish` (edit key) and `get_published` (id).
+
+This is load-bearing, not belt-and-braces. The anon key is public by design — it ships in the JS bundle and is readable by anyone who loads the site — so **a table grant is a public grant**. In v4.25.0 `roadmap_published` carried `for select using (true)` + `grant select to anon`, and because PostgREST does not require a filter, `GET /rest/v1/roadmap_published?select=data` returned every published roadmap to anyone. Found by internal security review; closed in 4.25.0. Do not reintroduce it — and note that an id-only grant is just as bad, because the id *is* the secret.
+
+Consequences to keep in mind when changing this area:
+
+- **Never add a `for select`/`for insert`/`for update` policy or a table `grant` on either table.** New data access = a new `SECURITY DEFINER` function taking a capability argument, granted `execute` to `anon`. After adding one, run `notify pgrst, 'reload schema';` or the RPC 404s.
+- **Realtime must stay on Broadcast, never Postgres Changes.** Postgres Changes evaluates RLS as the `anon` role and therefore needs a table select grant — i.e. it cannot coexist with the model above. A trigger (`broadcast_published`) publishes to topic `published:<id>`; the viewer subscribes to that topic (`App.jsx`, "Realtime" effect) and re-reads via `get_published`. The broadcast payload is a **signal only** — broadcast messages are size-capped and a large roadmap would not fit, so never put roadmap data in it.
+- **Rotating the anon key fixes nothing.** If a leak is reported, the question is which grant or policy is too broad.
+- **Residual risk, accepted by the user:** anyone holding a `?id=` link can read that roadmap indefinitely and there is no audit trail. Inherent to capability URLs. Tightening it further means real auth (Supabase Auth + per-roadmap ownership), which is a much larger change — don't start it uninvited.
+
+### Schema changes need a rollout order
+
+Revoking access breaks any browser tab still running an older bundle, so split anything breaking into additive-then-breaking and put the deploy in between: run the additive SQL → `git push` and deploy **both** sites → run the breaking SQL. `supabase/migrate-01-published-read-rpc.sql` and `migrate-02-revoke-public-read.sql` are the worked example. Verify with curl against the REST endpoint — the unfiltered request must return `permission denied`, the RPC must still return its one row.
 
 ## Deployment notes
 
@@ -90,6 +125,7 @@ The user has repeatedly flagged these as critical — never change their behavio
 - **Top-of-screen CTA** — the primary action bar at the top of the board.
 - **Sharing** — `handleShare` / `encodeShareData` / `decodeShareData` (App.jsx, "Share encoding" section). The `#share=<compressed>` URL flow must keep working end to end.
 - **Saving** — `exportBackup` / `handleBackupImport` (Backup button + JSON import), and the `_savedCopy` path that lets a shared preview be saved as a named local copy in `localStorage`.
+- **The Supabase RLS posture** — no policies and no table grants on `roadmap_working` or `roadmap_published`; all access via capability-checked `SECURITY DEFINER` functions. A blanket select policy here exposed every published roadmap to the internet once already (see **Supabase cloud sync**). Realtime stays on Broadcast for the same reason.
 
 If a change touches any of the above, call it out explicitly before making it.
 
