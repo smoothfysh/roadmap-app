@@ -1,0 +1,745 @@
+{
+  "title": "THREADHOUSE — APPAREL PLATFORM",
+  "heading": "Everyone has a plan until the Black Friday traffic hits",
+  "summary": "## Where we are\n\nThreadhouse now sells apparel in **four markets** (FR, DE, AT and a soft launch in NL). The last two quarters were about paying down the checkout and identity debt that was quietly capping conversion; the next two are about growth features that only become possible now that it's paid.\n\n### Shipped this half\n\n- **SEPA direct debit** went live in Germany — direct debit is the default payment method for a third of German shoppers, and not having it was costing us the basket.\n- **One-page checkout** replaced the four-step funnel. Cart-to-order is up 6.2pp.\n- **Passwordless sign-in** removed the password reset loop, which was our single largest contact driver.\n- **Self-service returns** took roughly €420K a year out of contact-centre handling.\n\n### What's next\n\n1. *Wallets* — Apple Pay and Google Pay one-tap, then Klarna pay-in-3 for Austria.\n2. *Passkeys* — the natural follow-on to magic links, and a prerequisite for the loyalty SSO work in Q1.\n3. *Fit* — AI fit recommendations trained on our own returns data. Apparel returns are a size problem far more than a taste problem.\n\n> Two things to watch: the Paris same-day pilot depends on a carrier contract that isn't signed, and visual search is blocked on a model-licensing decision we don't own.\n\n### Risks\n\n- Same-day delivery (Paris) — `carrier contract unsigned`, slipping\n- Visual search — blocked on legal review of the model licence\n- CDP consolidation — scope keeps growing; needs a hard cut\n",
+  "columns": [
+    { "id": "done", "title": "DONE", "subtitle": "Shipped and live", "color": "green" },
+    { "id": "coming", "title": "COMING SOON", "subtitle": "Q4 2026", "color": "blue" },
+    { "id": "after", "title": "AFTER THAT", "subtitle": "Q1 2027", "color": "amber" },
+    { "id": "future", "title": "FUTURE", "subtitle": "2027 and beyond", "color": "slate" }
+  ],
+  "teams": [
+    { "id": "payments", "name": "PAYMENTS" },
+    { "id": "checkout", "name": "CHECKOUT & CART" },
+    { "id": "auth", "name": "AUTHENTICATION (aka FIREFLY)" },
+    { "id": "search", "name": "SEARCH & DISCOVERY" },
+    { "id": "catalogue", "name": "CATALOGUE & SIZING" },
+    { "id": "fulfilment", "name": "FULFILMENT & RETURNS" },
+    { "id": "service", "name": "CUSTOMER SERVICE" },
+    { "id": "mobile", "name": "MOBILE APP" },
+    { "id": "data", "name": "DATA & PERSONALISATION" }
+  ],
+  "items": [
+    {
+      "id": "s01",
+      "columnId": "done",
+      "teamId": "payments",
+      "tag": "DE",
+      "text": "SEPA direct debit for German checkout - 28 FEB",
+      "flag": "completed",
+      "description": "Direct debit (Lastschrift) is the default payment method for roughly a third of German shoppers. Not offering it wasn't losing us the payment — it was losing us the basket, at the moment of highest intent.\n\nShipped with a Schufa-backed risk check so we can offer it to first-time buyers without eating the chargeback risk.",
+      "links": [
+        { "id": "l01a", "url": "https://threadhouse.atlassian.net/browse/PAY-1042" },
+        { "id": "l01b", "url": "https://threadhouse.atlassian.net/wiki/spaces/PAY/pages/88211/SEPA+rollout" }
+      ],
+      "startDate": "2026-01-06",
+      "endDate": "2026-02-28",
+      "milestones": [
+        { "id": "m01a", "date": "2026-01-23", "label": "Risk model signed off" },
+        { "id": "m01b", "date": "2026-02-11", "label": "10% traffic ramp" }
+      ],
+      "strategicCategory": "do-or-die",
+      "revenueType": "direct",
+      "revenueUplift": 480000,
+      "cadence": "year",
+      "revenueStream": "Payments"
+    },
+    {
+      "id": "s02",
+      "columnId": "done",
+      "teamId": "payments",
+      "tag": null,
+      "text": "PSD2 strong customer authentication rollout - Q1 2026",
+      "flag": "completed",
+      "description": "Regulatory, non-negotiable. The interesting part was the exemption engine: low-risk transactions under €30 skip the challenge entirely, which is why the failure rate went down rather than up.",
+      "links": null,
+      "jiraUrl": "https://threadhouse.atlassian.net/browse/PAY-0977",
+      "confluenceUrl": "https://threadhouse.atlassian.net/wiki/spaces/PAY/pages/71004/PSD2",
+      "startDate": "2026-01-06",
+      "endDate": "2026-03-31",
+      "milestones": null,
+      "strategicCategory": "do-or-die",
+      "revenueType": "metric",
+      "metricName": "Payment failure rate",
+      "metricDir": "down",
+      "metricValue": 2.4,
+      "metricUnit": "pp"
+    },
+    {
+      "id": "s03",
+      "columnId": "done",
+      "teamId": "checkout",
+      "tag": null,
+      "text": "One-page checkout redesign - Mid MAR",
+      "flag": "completed",
+      "description": "Collapsed the four-step funnel into a single scrollable page with inline validation. Every step we removed was a step people were leaving on.\n\nA/B tested at 50/50 for three weeks before the full ramp.",
+      "links": [
+        { "id": "l03a", "url": "https://www.figma.com/file/9xQm2/checkout-v3" },
+        { "id": "l03b", "url": "https://app.amplitude.com/analytics/threadhouse/dashboard/checkout-funnel" }
+      ],
+      "startDate": "2026-01-19",
+      "endDate": "2026-03-16",
+      "milestones": [
+        { "id": "m03a", "date": "2026-02-24", "label": "A/B test starts" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": "direct",
+      "revenueUplift": 900000,
+      "outcomeMax": 1400000,
+      "cadence": "year",
+      "revenueStream": "Conversion",
+      "enablerNote": "Unblocks every future one-tap wallet"
+    },
+    {
+      "id": "s04",
+      "columnId": "done",
+      "teamId": "auth",
+      "tag": null,
+      "text": "Passwordless magic-link sign-in - 10 APR",
+      "flag": "completed",
+      "description": "Password resets were our single largest contact driver — more tickets than delivery chasing. Magic links removed the category rather than optimising it.",
+      "links": [
+        { "id": "l04a", "url": "https://github.com/threadhouse/firefly-auth" }
+      ],
+      "startDate": "2026-02-09",
+      "endDate": "2026-04-10",
+      "milestones": [
+        { "id": "m04a", "date": "2026-03-02", "label": "Internal dogfood" },
+        { "id": "m04b", "date": "2026-03-30", "label": "5% cohort live" }
+      ],
+      "strategicCategory": "stay-relevant",
+      "revenueType": "metric",
+      "metricName": "Sign-in completion",
+      "metricDir": "up",
+      "metricValue": 11,
+      "metricUnit": "pp"
+    },
+    {
+      "id": "s05",
+      "columnId": "done",
+      "teamId": "search",
+      "tag": null,
+      "text": "Typo-tolerant search on the PLP - 22 MAY",
+      "flag": "completed",
+      "description": "\"Sweatshit\" now returns sweatshirts. Roughly one in nine apparel searches contains a typo, and every one of them used to return an empty page.",
+      "links": [
+        { "id": "l05a", "url": "https://lookerstudio.google.com/reporting/search-quality" }
+      ],
+      "startDate": "2026-04-06",
+      "endDate": "2026-05-22",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": "metric",
+      "metricName": "Search zero-results",
+      "metricDir": "down",
+      "metricValue": 38,
+      "metricUnit": "%"
+    },
+    {
+      "id": "s06",
+      "columnId": "done",
+      "teamId": "catalogue",
+      "tag": "FR/DE",
+      "text": "Unified size chart across FR and DE catalogues - End of JUNE",
+      "flag": "completed",
+      "description": "The same jumper was listed as M in France and 38 in Germany, with no mapping between them. Merchandising maintained the two by hand, and they disagreed about 8% of the time.",
+      "links": [
+        { "id": "l06a", "url": "https://docs.google.com/spreadsheets/d/1aZ9/size-mapping" },
+        { "id": "l06b", "url": "https://www.notion.so/threadhouse/Sizing-standards-4f2a" }
+      ],
+      "startDate": "2026-05-04",
+      "endDate": "2026-06-30",
+      "milestones": null,
+      "strategicCategory": "do-or-die",
+      "revenueType": null,
+      "enablerNote": "Prerequisite for AI fit recommendations"
+    },
+    {
+      "id": "s07",
+      "columnId": "done",
+      "teamId": "service",
+      "tag": null,
+      "text": "Self-service returns portal - 30 JUN",
+      "flag": "completed",
+      "description": "Customers book their own return, print their own label, and see the refund clock start. Previously all three of those were an email to an agent.",
+      "links": [
+        { "id": "l07a", "url": "https://threadhouse.atlassian.net/browse/CS-611" }
+      ],
+      "startDate": "2026-04-20",
+      "endDate": "2026-06-30",
+      "milestones": [
+        { "id": "m07a", "date": "2026-06-01", "label": "FR pilot" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": "saving",
+      "savingAmount": 420000,
+      "savingKind": "reduce",
+      "savingArea": "Contact centre handling",
+      "cadence": "year"
+    },
+    {
+      "id": "s08",
+      "columnId": "done",
+      "teamId": "fulfilment",
+      "tag": null,
+      "text": "Carrier-agnostic label printing - Q2 2026",
+      "flag": "completed",
+      "description": "One label service, four carriers behind it. Switching a route used to be a deploy; it's now a config change, which is what made the same-day pilot conceivable at all.",
+      "links": null,
+      "startDate": "2026-04-13",
+      "endDate": "2026-06-19",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": "saving",
+      "savingAmount": 95000,
+      "savingKind": "reduce",
+      "savingArea": "Per-parcel carrier surcharges",
+      "cadence": "year",
+      "enablerNote": "Enables the same-day delivery pilot"
+    },
+    {
+      "id": "s09",
+      "columnId": "done",
+      "teamId": "mobile",
+      "tag": null,
+      "text": "Native wishlist with push price alerts - 12 MAY",
+      "flag": "completed",
+      "description": "Apparel shoppers wait for the sale. Now we tell them when it starts instead of hoping they come back and check.",
+      "links": [
+        { "id": "l09a", "url": "https://www.loom.com/share/wishlist-walkthrough" }
+      ],
+      "startDate": "2026-03-23",
+      "endDate": "2026-05-12",
+      "milestones": null,
+      "strategicCategory": "beat-competition",
+      "revenueType": "direct",
+      "revenueUplift": 260000,
+      "cadence": "year",
+      "revenueStream": "Retention"
+    },
+    {
+      "id": "s10",
+      "columnId": "done",
+      "teamId": "data",
+      "tag": null,
+      "text": "Consent-mode v2 analytics migration - Q1 2026",
+      "flag": "completed",
+      "description": "Unglamorous and completely load-bearing. Without it, every downstream personalisation model is training on data we aren't allowed to use.",
+      "links": null,
+      "startDate": "2026-01-12",
+      "endDate": "2026-03-20",
+      "milestones": null,
+      "strategicCategory": "do-or-die",
+      "revenueType": null,
+      "enablerNote": "Legal basis for all personalisation work"
+    },
+
+    {
+      "id": "s11",
+      "columnId": "coming",
+      "teamId": "payments",
+      "tag": null,
+      "text": "Apple Pay & Google Pay one-tap - 15 SEP",
+      "flag": null,
+      "description": "Wallet payments skip address entry, card entry and the SCA challenge in one move. This is the payoff for the one-page checkout work — it only became a small change because that landed first.",
+      "links": [
+        { "id": "l11a", "url": "https://threadhouse.atlassian.net/browse/PAY-1188" },
+        { "id": "l11b", "url": "https://www.figma.com/file/7kLm/wallet-buttons" }
+      ],
+      "startDate": "2026-07-27",
+      "endDate": "2026-09-15",
+      "milestones": [
+        { "id": "m11a", "date": "2026-08-18", "label": "Sandbox certified" },
+        { "id": "m11b", "date": "2026-09-04", "label": "Merchant review passed" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": "direct",
+      "revenueUplift": 1200000,
+      "outcomeMax": 1800000,
+      "cadence": "year",
+      "revenueStream": "Conversion"
+    },
+    {
+      "id": "s12",
+      "columnId": "coming",
+      "teamId": "payments",
+      "tag": "AT",
+      "text": "Klarna pay-in-3 for Austria - 30 OCT",
+      "flag": "warning",
+      "description": "Austria is our smallest market and our highest average basket, which is exactly the profile that responds to instalments.\n\n**At risk:** Klarna's Austrian entity needs a separate merchant agreement and legal have had it for five weeks.",
+      "links": [
+        { "id": "l12a", "url": "https://threadhouse.slack.com/archives/C04PAY/p1723" }
+      ],
+      "startDate": "2026-09-07",
+      "endDate": "2026-10-30",
+      "milestones": [
+        { "id": "m12a", "date": "2026-09-28", "label": "Contract signed" }
+      ],
+      "strategicCategory": "stay-relevant",
+      "revenueType": "direct",
+      "revenueUplift": 310000,
+      "cadence": "year",
+      "revenueStream": "Payments"
+    },
+    {
+      "id": "s13",
+      "columnId": "coming",
+      "teamId": "checkout",
+      "tag": null,
+      "text": "Guest checkout with express address lookup - Mid OCT",
+      "flag": null,
+      "description": "Forcing account creation before purchase is the oldest self-inflicted conversion wound in ecommerce. Guest checkout, then an optional one-tap account claim on the confirmation page.",
+      "links": null,
+      "startDate": "2026-08-24",
+      "endDate": "2026-10-16",
+      "milestones": null,
+      "strategicCategory": "do-or-die",
+      "revenueType": "metric",
+      "metricName": "Checkout completion",
+      "metricDir": "up",
+      "metricValue": 4.5,
+      "metricUnit": "pp"
+    },
+    {
+      "id": "s14",
+      "columnId": "coming",
+      "teamId": "auth",
+      "tag": null,
+      "text": "Passkeys (WebAuthn) rollout - Q4 2026",
+      "flag": "warning",
+      "description": "The natural successor to magic links: no email round-trip, phishing-resistant, and it makes the loyalty SSO work in Q1 tractable.\n\n**At risk:** cross-device sync behaviour still differs enough between iOS, Android and Windows that our fallback logic is more complex than the happy path.",
+      "links": [
+        { "id": "l14a", "url": "https://github.com/threadhouse/firefly-auth/pull/842" },
+        { "id": "l14b", "url": "https://www.figma.com/file/2pRt/passkey-prompts" },
+        { "id": "l14c", "url": "https://threadhouse.atlassian.net/wiki/spaces/SEC/pages/91002/Passkeys+RFC" }
+      ],
+      "startDate": "2026-08-03",
+      "endDate": "2026-12-18",
+      "milestones": [
+        { "id": "m14a", "date": "2026-09-15", "label": "RFC approved" },
+        { "id": "m14b", "date": "2026-10-20", "label": "Staff beta" },
+        { "id": "m14c", "date": "2026-11-24", "label": "25% rollout" }
+      ],
+      "strategicCategory": "stay-relevant",
+      "revenueType": "metric",
+      "metricName": "Account takeover attempts",
+      "metricDir": "down",
+      "metricValue": 60,
+      "metricUnit": "%",
+      "enablerNote": "Prerequisite for loyalty SSO"
+    },
+    {
+      "id": "s15",
+      "columnId": "coming",
+      "teamId": "auth",
+      "tag": null,
+      "text": "Session hardening and device list - 20 NOV",
+      "flag": null,
+      "description": "Let people see where they're signed in and revoke a session. Table stakes for anything holding a stored card.",
+      "links": null,
+      "startDate": "2026-10-05",
+      "endDate": "2026-11-20",
+      "milestones": null,
+      "strategicCategory": "do-or-die",
+      "revenueType": null,
+      "enablerNote": "Required before card vaulting ships"
+    },
+    {
+      "id": "s16",
+      "columnId": "coming",
+      "teamId": "search",
+      "tag": null,
+      "text": "Visual search: shop the look from a photo - Q4 2026",
+      "flag": "risk",
+      "description": "Upload or snap a photo, get the closest things we sell. The demo is genuinely impressive.\n\n**Blocked:** the licence on the embedding model doesn't clearly permit commercial use on user-uploaded images. Legal review has been open since July and we are not starting the integration until it closes.",
+      "links": [
+        { "id": "l16a", "url": "https://miro.com/app/board/visual-search-discovery" },
+        { "id": "l16b", "url": "https://threadhouse.atlassian.net/browse/SRCH-402" }
+      ],
+      "startDate": "2026-10-12",
+      "endDate": "2026-12-31",
+      "milestones": [
+        { "id": "m16a", "date": "2026-11-02", "label": "Legal decision due" }
+      ],
+      "strategicCategory": "disrupt",
+      "revenueType": null,
+      "enablerNote": "Opens the whole inspiration-led shopping surface"
+    },
+    {
+      "id": "s17",
+      "columnId": "coming",
+      "teamId": "catalogue",
+      "tag": null,
+      "text": "AI fit recommendations from returns data - 05 DEC",
+      "flag": null,
+      "description": "Apparel returns are overwhelmingly a size problem, not a taste problem — \"too small\" and \"too big\" are more than half our return reasons. We already have the ground truth in the returns log; we just weren't using it.\n\nModel suggests a size from the customer's own return history plus the garment's measured tolerances.",
+      "links": [
+        { "id": "l17a", "url": "https://lookerstudio.google.com/reporting/returns-by-reason" },
+        { "id": "l17b", "url": "https://docs.google.com/presentation/d/1kFit/fit-model-proposal" }
+      ],
+      "startDate": "2026-09-14",
+      "endDate": "2026-12-05",
+      "milestones": [
+        { "id": "m17a", "date": "2026-10-26", "label": "Model beats baseline" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": "metric",
+      "metricName": "Size-related returns",
+      "metricDir": "down",
+      "metricValue": 18,
+      "metricUnit": "%"
+    },
+    {
+      "id": "s18",
+      "columnId": "coming",
+      "teamId": "fulfilment",
+      "tag": "FR",
+      "text": "Same-day delivery pilot in Paris - 18 NOV",
+      "flag": "warning",
+      "description": "Three arrondissements, one micro-hub, cut-off at 13:00.\n\n**At risk:** the carrier contract is unsigned and the micro-hub lease depends on it. Every week of delay pushes us closer to peak, and we will not launch a new delivery promise during Black Friday.",
+      "links": [
+        { "id": "l18a", "url": "https://threadhouse.atlassian.net/browse/FUL-289" }
+      ],
+      "startDate": "2026-09-21",
+      "endDate": "2026-11-18",
+      "milestones": [
+        { "id": "m18a", "date": "2026-10-09", "label": "Carrier contract" },
+        { "id": "m18b", "date": "2026-11-02", "label": "Hub operational" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": "direct",
+      "revenueUplift": 180000,
+      "cadence": "year",
+      "revenueStream": "New markets"
+    },
+    {
+      "id": "s19",
+      "columnId": "coming",
+      "teamId": "service",
+      "tag": null,
+      "text": "AI triage for inbound tickets - Q4 2026",
+      "flag": null,
+      "description": "Classify, route, and auto-answer the top twelve intents. Deliberately *not* a chatbot on the storefront — this sits behind the queue, where a wrong answer costs us a re-route rather than a customer.",
+      "links": [
+        { "id": "l19a", "url": "https://www.notion.so/threadhouse/Triage-intents-9c31" }
+      ],
+      "startDate": "2026-10-01",
+      "endDate": "2026-12-19",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": "saving",
+      "savingAmount": 380000,
+      "savingKind": "reduce",
+      "savingArea": "Tier-1 agent time",
+      "cadence": "year"
+    },
+    {
+      "id": "s20",
+      "columnId": "coming",
+      "teamId": "mobile",
+      "tag": null,
+      "text": "Native app checkout parity - 30 NOV",
+      "flag": null,
+      "description": "The app still hands off to a web view at payment, which is where the drop-off is. Bringing checkout native closes a 9pp gap against the mobile web funnel.",
+      "links": null,
+      "startDate": "2026-09-28",
+      "endDate": "2026-11-30",
+      "milestones": null,
+      "strategicCategory": "do-or-die",
+      "revenueType": "direct",
+      "revenueUplift": 540000,
+      "cadence": "year",
+      "revenueStream": "Conversion"
+    },
+    {
+      "id": "s21",
+      "columnId": "coming",
+      "teamId": "data",
+      "tag": null,
+      "text": "Real-time recommendation service - Q4 2026",
+      "flag": null,
+      "description": "Recommendations currently refresh nightly, which means the model has no idea what you looked at four minutes ago. Moving to a streaming feature store fixes the session-level signal.",
+      "links": [
+        { "id": "l21a", "url": "https://github.com/threadhouse/reco-service" }
+      ],
+      "startDate": "2026-08-17",
+      "endDate": "2026-12-11",
+      "milestones": [
+        { "id": "m21a", "date": "2026-10-13", "label": "Feature store live" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": null,
+      "enablerNote": "Feeds fit, search ranking and the app home"
+    },
+
+    {
+      "id": "s22",
+      "columnId": "after",
+      "teamId": "payments",
+      "tag": null,
+      "text": "Stored-card vaulting and network tokens - Q1 2027",
+      "flag": null,
+      "description": "Network tokens survive card reissues, so a expired-card churn event stops being a lost subscription. Depends on session hardening landing first.",
+      "links": null,
+      "startDate": "2027-01-11",
+      "endDate": "2027-03-26",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": "metric",
+      "metricName": "Repeat-purchase friction",
+      "metricDir": "down",
+      "metricValue": 22,
+      "metricUnit": "%"
+    },
+    {
+      "id": "s23",
+      "columnId": "after",
+      "teamId": "checkout",
+      "tag": null,
+      "text": "Cart abandonment recovery flows - Mid FEB",
+      "flag": null,
+      "description": "Triggered email and push for carts left over €40, with a size-back-in-stock variant. Held until the real-time reco service lands so the recovery email can carry a useful alternative rather than the same sold-out item.",
+      "links": null,
+      "startDate": "2027-01-05",
+      "endDate": "2027-02-16",
+      "milestones": null,
+      "strategicCategory": "beat-competition",
+      "revenueType": "direct",
+      "revenueUplift": 620000,
+      "cadence": "year",
+      "revenueStream": "Retention"
+    },
+    {
+      "id": "s24",
+      "columnId": "after",
+      "teamId": "auth",
+      "tag": "DE/FR",
+      "text": "Single sign-on for loyalty members - Q1 2027",
+      "flag": null,
+      "description": "One identity across the storefront, the app and the in-store tills. Only sensible once passkeys are the primary factor.",
+      "links": [
+        { "id": "l24a", "url": "https://threadhouse.atlassian.net/wiki/spaces/SEC/pages/93110/Loyalty+SSO" }
+      ],
+      "startDate": "2027-01-18",
+      "endDate": "2027-03-31",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": null,
+      "enablerNote": "Unifies online and in-store customer records"
+    },
+    {
+      "id": "s25",
+      "columnId": "after",
+      "teamId": "search",
+      "tag": null,
+      "text": "Natural-language search for occasion queries - Q1 2027",
+      "flag": null,
+      "description": "\"Linen shirt for a wedding in Greece in August\" is a query our current index cannot answer, and it is exactly how people describe what they actually want to buy.",
+      "links": [
+        { "id": "l25a", "url": "https://miro.com/app/board/nl-search-concepts" }
+      ],
+      "startDate": "2027-01-25",
+      "endDate": "2027-03-31",
+      "milestones": null,
+      "strategicCategory": "disrupt",
+      "revenueType": null,
+      "enablerNote": "Positions us ahead of marketplace search"
+    },
+    {
+      "id": "s26",
+      "columnId": "after",
+      "teamId": "catalogue",
+      "tag": "ES/IT",
+      "text": "Catalogue expansion to Spain and Italy - 31 MAR",
+      "flag": null,
+      "description": "Two new markets, ~40K SKUs to localise, and a sizing standard that agrees with neither FR nor DE. The unified size chart is what makes this a translation job rather than a re-modelling job.",
+      "links": [
+        { "id": "l26a", "url": "https://docs.google.com/spreadsheets/d/2bXy/es-it-localisation" }
+      ],
+      "startDate": "2027-01-04",
+      "endDate": "2027-03-31",
+      "milestones": [
+        { "id": "m26a", "date": "2027-02-15", "label": "ES catalogue complete" }
+      ],
+      "strategicCategory": "beat-competition",
+      "revenueType": "direct",
+      "revenueUplift": 2200000,
+      "outcomeMax": 3500000,
+      "cadence": "year",
+      "revenueStream": "New markets"
+    },
+    {
+      "id": "s27",
+      "columnId": "after",
+      "teamId": "fulfilment",
+      "tag": null,
+      "text": "Returns consolidation hubs - Q1 2027",
+      "flag": null,
+      "description": "Returns currently travel individually back to the central warehouse. Consolidating at three regional hubs cuts the return leg cost by about a third and gets stock back on sale roughly six days sooner.",
+      "links": null,
+      "startDate": "2027-01-11",
+      "endDate": "2027-03-19",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": "saving",
+      "savingAmount": 1100000,
+      "savingKind": "reduce",
+      "savingArea": "Reverse logistics",
+      "cadence": "year"
+    },
+    {
+      "id": "s28",
+      "columnId": "after",
+      "teamId": "service",
+      "tag": "NL",
+      "text": "Dutch-language support desk - Mid MAR",
+      "flag": null,
+      "description": "The NL soft launch is running on English-language support, which shows in the CSAT gap. Hiring two native speakers and localising the top 40 help articles.",
+      "links": null,
+      "startDate": "2027-02-01",
+      "endDate": "2027-03-16",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": "metric",
+      "metricName": "NL customer satisfaction",
+      "metricDir": "up",
+      "metricValue": 12,
+      "metricUnit": "pp"
+    },
+    {
+      "id": "s29",
+      "columnId": "after",
+      "teamId": "mobile",
+      "tag": null,
+      "text": "Offline browsing and wishlist sync - Q1 2027",
+      "flag": null,
+      "description": "Commutes are prime browsing time and the Métro has no signal. Cache the last-viewed grid and let the wishlist queue writes until the connection comes back.",
+      "links": null,
+      "startDate": "2027-02-08",
+      "endDate": "2027-03-31",
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": null
+    },
+    {
+      "id": "s30",
+      "columnId": "after",
+      "teamId": "data",
+      "tag": null,
+      "text": "Customer data platform consolidation - Q1 2027",
+      "flag": "warning",
+      "description": "Four systems currently believe they own the customer record and none of them agree.\n\n**At risk:** scope has grown twice since January — it now quietly includes loyalty, consent and the email platform. This needs a hard cut before it starts, not after.",
+      "links": [
+        { "id": "l30a", "url": "https://threadhouse.atlassian.net/browse/DATA-155" },
+        { "id": "l30b", "url": "https://www.notion.so/threadhouse/CDP-scope-7b12" }
+      ],
+      "startDate": "2027-01-04",
+      "endDate": "2027-03-31",
+      "milestones": [
+        { "id": "m30a", "date": "2027-01-29", "label": "Scope frozen" }
+      ],
+      "strategicCategory": "do-or-die",
+      "revenueType": "saving",
+      "savingAmount": 240000,
+      "savingKind": "utilize",
+      "savingArea": "Duplicate vendor licences",
+      "cadence": "year"
+    },
+
+    {
+      "id": "s31",
+      "columnId": "future",
+      "teamId": "payments",
+      "tag": null,
+      "text": "Crypto and stablecoin settlement pilot",
+      "flag": "done",
+      "description": "Deprioritised in June. Demand testing found essentially no overlap between our customer base and people wanting to pay for a jumper in stablecoin. Parked rather than killed — revisit if the regulatory picture changes.",
+      "links": null,
+      "startDate": null,
+      "endDate": null,
+      "milestones": null,
+      "strategicCategory": null,
+      "revenueType": null
+    },
+    {
+      "id": "s32",
+      "columnId": "future",
+      "teamId": "checkout",
+      "tag": null,
+      "text": "Buy-now-pay-later aggregator",
+      "flag": null,
+      "description": "Rather than integrating each BNPL provider by hand, route to whichever one approves the shopper. Only worth it once we have three or more live.",
+      "links": null,
+      "startDate": null,
+      "endDate": null,
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": null
+    },
+    {
+      "id": "s33",
+      "columnId": "future",
+      "teamId": "search",
+      "tag": null,
+      "text": "In-store kiosk search integration",
+      "flag": null,
+      "description": "Search the full online catalogue from a screen in the shop, order to home from the till. Depends on loyalty SSO for the customer record.",
+      "links": null,
+      "startDate": null,
+      "endDate": null,
+      "milestones": null,
+      "strategicCategory": "beat-competition",
+      "revenueType": null
+    },
+    {
+      "id": "s34",
+      "columnId": "future",
+      "teamId": "catalogue",
+      "tag": null,
+      "text": "3D garment viewer and virtual try-on - Q3 2027",
+      "flag": null,
+      "description": "The genuinely ambitious one. Needs 3D capture in the studio pipeline, which is a merchandising operations change far more than an engineering one — and that is the part nobody has costed yet.",
+      "links": [
+        { "id": "l34a", "url": "https://www.figma.com/file/5vTr/tryon-exploration" },
+        { "id": "l34b", "url": "https://vendor-portal.styleforge.example.com/demo/threadhouse" }
+      ],
+      "startDate": "2027-07-05",
+      "endDate": "2027-09-30",
+      "milestones": null,
+      "strategicCategory": "disrupt",
+      "revenueType": null,
+      "enablerNote": "Would halve size-related returns if it works"
+    },
+    {
+      "id": "s35",
+      "columnId": "future",
+      "teamId": "service",
+      "tag": null,
+      "text": "Voice support agent for order status",
+      "flag": null,
+      "description": "\"Where is my order\" is 40% of calls and needs no judgement at all. Sequenced after the AI triage work proves the intent classification is trustworthy.",
+      "links": null,
+      "startDate": null,
+      "endDate": null,
+      "milestones": null,
+      "strategicCategory": "stay-relevant",
+      "revenueType": null
+    },
+    {
+      "id": "s36",
+      "columnId": "future",
+      "teamId": "data",
+      "tag": null,
+      "text": "On-device personalisation - Q4 2027",
+      "flag": null,
+      "description": "Keep the behavioural signal on the phone and ship the model to it, rather than shipping the behaviour to us. Better privacy posture, and it stops the personalisation roadmap being hostage to consent rates.",
+      "links": null,
+      "startDate": "2027-10-04",
+      "endDate": "2027-12-17",
+      "milestones": null,
+      "strategicCategory": "disrupt",
+      "revenueType": null,
+      "enablerNote": "Removes the consent-rate ceiling on personalisation"
+    }
+  ]
+}
