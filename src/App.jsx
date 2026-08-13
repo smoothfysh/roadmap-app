@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info, Link2 } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info, Link2, Menu, SlidersHorizontal, CheckSquare, Square } from "lucide-react";
 import { version } from "../package.json";
 import { supabase, cloudEnabled } from "./supabaseClient";
 import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
@@ -1103,7 +1103,8 @@ export default function RoadmapTracker() {
   const [cloudViewError, setCloudViewError] = useState(false);  // ?id= view: roadmap not published / not found
   const [cloudViewId, setCloudViewId] = useState(null);         // id of a published roadmap being viewed (drives realtime)
   const [cloudLive, setCloudLive] = useState(false);            // realtime channel subscribed
-  const [actionsMenuOpen, setActionsMenuOpen] = useState(false); // top-bar "Actions ▾" dropdown
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false); // top-bar burger menu
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);       // top-bar "View ▾" density dropdown
   const [undoStack, setUndoStack] = useState([]);                // in-session undo snapshots (lost on refresh)
   const ganttHeaderRef = useRef(null);
   const ganttBodyRef = useRef(null);
@@ -1388,6 +1389,13 @@ export default function RoadmapTracker() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [actionsMenuOpen]);
+
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const handler = (e) => { if (e.key === "Escape") setViewMenuOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [viewMenuOpen]);
 
   // In-session undo via Ctrl/⌘+Z (ignored while typing in a field or in read-only view).
   useEffect(() => {
@@ -2286,6 +2294,32 @@ export default function RoadmapTracker() {
     () => buildGanttLayout(displayData.items, today, ganttZoom, ganttAnyDrilled ? GANTT_COARSE_W : ganttColW),
     [displayData.items, today, ganttZoom, ganttAnyDrilled, ganttColW]
   );
+  // Which lanes the View menu's "Collapse all lanes" acts on. Every view means every team,
+  // except IMPACT: it shows one quarter at a time and its collapse has always been scoped to the
+  // lanes actually on screen, so teams with nothing that quarter keep whatever state they had.
+  // (The collapsed set itself is shared across views — see TEAMS_COLLAPSE_KEY.)
+  const collapseScopeIds = useMemo(() => {
+    if (activeView !== "impact") return displayData.teams.map((t) => t.id);
+    const selectedCol = displayData.columns[Math.min(impactColIdx, displayData.columns.length - 1)];
+    if (!selectedCol) return [];
+    const doneColId  = displayData.columns[0]?.id;
+    const selQuarter = getColumnQuarter(selectedCol);
+    const shown = displayData.items.filter((i) =>
+      i.flag !== "done" && (
+        i.columnId === selectedCol.id ||
+        (selQuarter != null && i.columnId === doneColId && getItemQuarter(i, displayData.columns) === selQuarter)
+      )
+    );
+    return displayData.teams.filter((t) => shown.some((i) => i.teamId === t.id)).map((t) => t.id);
+  }, [activeView, displayData.teams, displayData.items, displayData.columns, impactColIdx]);
+
+  const allScopedCollapsed = collapseScopeIds.length > 0 && collapseScopeIds.every((id) => collapsedTeams.includes(id));
+  const toggleCollapseAll = () => persistCollapsedTeams(
+    allScopedCollapsed
+      ? collapsedTeams.filter((id) => !collapseScopeIds.includes(id))
+      : [...new Set([...collapsedTeams, ...collapseScopeIds])]
+  );
+
   // Today as an ISO string, for comparing against milestone dates (solid diamond once passed).
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
@@ -2490,97 +2524,32 @@ export default function RoadmapTracker() {
       )}
 
       <div className="p-6">
-        {/* Header */}
-        <div className="max-w-[1800px] mx-auto mb-6">
-          <div className="flex items-center justify-between mb-2">
-            {editingTitle && !isPreview ? (
-              <input
-                type="text"
-                defaultValue={data.title || seedData.title}
-                autoFocus
-                onBlur={(e) => { updateTitle(e.target.value); setEditingTitle(false); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.target.blur();
-                  if (e.key === "Escape") setEditingTitle(false);
-                }}
-                className="text-xs font-mono tracking-[0.2em] text-stone-500 uppercase border border-stone-500 px-2 py-1 bg-white min-w-[260px]"
-              />
-            ) : (
-              <div
-                className={`text-xs font-mono tracking-[0.2em] text-stone-500 uppercase border border-stone-300 px-2 py-1 bg-white ${!isPreview ? "cursor-text hover:text-stone-800 hover:border-stone-500" : ""}`}
-                onClick={() => { if (!isPreview) setEditingTitle(true); }}
-                title={!isPreview ? "Click to edit title" : undefined}
-              >
-                {displayData.title || seedData.title}
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              {/* Compact view toggle (roadmap view only) — kept beside the live cloud status */}
-              {activeView === "roadmap" && (
-                <button
-                  onClick={() => setCompactView((v) => {
-                    const next = !v;
-                    try { localStorage.setItem("roadmap-compact-view", String(next)); } catch {}
-                    return next;
-                  })}
-                  aria-pressed={compactView}
-                  className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors ${
-                    compactView
-                      ? "border-emerald-400 bg-emerald-50 text-emerald-700"
-                      : "border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100"
-                  }`}
-                  title={compactView
-                    ? "Compact view ON — each column flows independently. Click to align team rows across all columns."
-                    : "Compact view OFF — team rows align across all columns. Click for the compact, independent layout."}
-                >
-                  <Rows3 className="w-3 h-3" />
-                  Compact View
-                </button>
-              )}
-
-              {/* Live cloud status — always visible (never tucked into the menu) */}
-              {cloudEnabled && !isPreview && (
-                <button
-                  onClick={() => setCloudModalOpen(true)}
-                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 hover:text-violet-900 hover:border-violet-400 px-2.5 py-1 rounded transition-colors"
-                  title="Save to the cloud (auto-save) and manage your roadmaps"
-                >
-                  <Cloud className="w-3 h-3" />
-                  {cloudRoadmap
-                    ? (cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Save failed" : "Synced")
-                    : "Cloud"}
-                </button>
-              )}
-              {cloudEnabled && !isPreview && cloudRoadmap && (
-                <button
-                  onClick={handlePublish}
-                  disabled={cloudPublishing || publishChecking || !cloudUnpublished}
-                  className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2.5 py-1 rounded transition-colors ${
-                    cloudUnpublished
-                      ? "border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800"
-                      : "border-stone-200 bg-white text-stone-400 cursor-default"
-                  }`}
-                  title={cloudUnpublished ? "Publish your changes so viewers see the latest (checks first that nothing newer is already published)" : "All changes published — viewers see the latest"}
-                >
-                  {publishChecking ? "Checking…" : cloudPublishing ? "Publishing…" : cloudUnpublished ? "● Publish" : "Published ✓"}
-                </button>
-              )}
-
-              {/* Actions menu — everything else (Share, CSV, JSON, Reset) */}
-              <div className="relative">
+        {/* Pinned action bar. It must stay a DIRECT child of this full-height container: a sticky
+            element only sticks within its own parent's box, so nesting it in the header block below
+            made it scroll away as soon as that block did. The View menu holds Collapse all, which
+            used to sit at the foot of each view — sticky is what keeps it in reach on a long board.
+            z-[45] sits above the Gantt's own sticky header (z-30) and label column (z-40), below
+            the modals (z-50+). The negative margin lets the background span the page padding. */}
+        <div className="sticky top-0 z-[45] -mx-6 -mt-6 px-6 py-2 mb-4 bg-stone-50/95 backdrop-blur-sm border-b border-stone-200">
+          <div className="max-w-[1800px] mx-auto flex items-center justify-between gap-2">
+            {/* Left cluster — burger menu, then the roadmap title (a label, not a button) */}
+            <div className="flex items-center gap-2 min-w-0">
+              {/* Menu — Share, CSV, JSON, Reset, Help. Always top-left, mobile and desktop alike. */}
+              <div className="relative shrink-0">
                 <button
                   onClick={() => setActionsMenuOpen((o) => !o)}
                   aria-haspopup="true"
                   aria-expanded={actionsMenuOpen}
-                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
-                  title="Share, import/export, backup and more"
+                  aria-label="Menu"
+                  className="flex items-center justify-center border border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100 rounded transition-colors w-8 h-7"
+                  title="Share, import/export, backup, help"
                 >
-                  Actions <span className="text-[9px] leading-none">▾</span>
+                  <Menu className="w-4 h-4" />
                 </button>
                 {actionsMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setActionsMenuOpen(false)} />
-                    <div className="absolute right-0 top-full mt-1.5 z-50 bg-white border border-stone-200 rounded-lg shadow-xl py-1.5 min-w-[220px]">
+                    <div className="absolute left-0 top-full mt-1.5 z-50 bg-white border border-stone-200 rounded-lg shadow-xl py-1.5 min-w-[220px]">
                       {!isPreview && (
                         <>
                           <button
@@ -2635,7 +2604,23 @@ export default function RoadmapTracker() {
                           >
                             <Upload className="w-3.5 h-3.5 opacity-70" /> Restore JSON
                           </button>
+                        </>
+                      )}
 
+                      {/* Help — opens the data/storage FAQ in a new tab */}
+                      <div className="h-px bg-stone-100 my-1 mx-2" />
+                      <a
+                        href="/help.html"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setActionsMenuOpen(false)}
+                        className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5 opacity-70" /> Help
+                      </a>
+
+                      {!isPreview && (
+                        <>
                           <div className="h-px bg-stone-100 my-1 mx-2" />
                           <button
                             onClick={() => { setActionsMenuOpen(false); resetToSeed(); }}
@@ -2650,23 +2635,148 @@ export default function RoadmapTracker() {
                 )}
               </div>
 
-              {/* Hidden file inputs (triggered from the Actions menu) */}
+              {/* Hidden file inputs (triggered from the menu) */}
               {!isPreview && <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImport} className="hidden" />}
               {!isPreview && <input ref={backupInputRef} type="file" accept=".json,application/json" onChange={handleBackupImport} className="hidden" />}
 
-              {/* Help — opens the data/storage FAQ in a new tab */}
-              <a
-                href="/help.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100 px-2.5 py-1 rounded transition-colors"
-                title="How this app stores your data (opens in a new tab)"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                Help
-              </a>
+              {editingTitle && !isPreview ? (
+                <input
+                  type="text"
+                  defaultValue={data.title || seedData.title}
+                  autoFocus
+                  onBlur={(e) => { updateTitle(e.target.value); setEditingTitle(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.target.blur();
+                    if (e.key === "Escape") setEditingTitle(false);
+                  }}
+                  className="text-xs font-mono tracking-[0.2em] text-stone-500 uppercase border border-stone-500 px-2 py-1 bg-white w-[160px] sm:w-[260px]"
+                />
+              ) : (
+                <div
+                  className={`text-xs font-mono tracking-[0.2em] text-stone-500 uppercase px-1 py-1 truncate ${!isPreview ? "cursor-text border-b border-dashed border-stone-300 hover:text-stone-800 hover:border-stone-500" : ""}`}
+                  onClick={() => { if (!isPreview) setEditingTitle(true); }}
+                  title={!isPreview ? "Click to edit title" : undefined}
+                >
+                  {displayData.title || seedData.title}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {/* View menu — the density controls. Both settings used to be separate CTAs (compact
+                  view up here, "Collapse all" at the foot of each view); they're one menu now, so
+                  the sticky header keeps both reachable without scrolling. */}
+              {(activeView === "roadmap" || collapseScopeIds.length > 0) && (
+                <div className="relative">
+                  <button
+                    onClick={() => setViewMenuOpen((o) => !o)}
+                    aria-haspopup="true"
+                    aria-expanded={viewMenuOpen}
+                    className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2 sm:px-2.5 py-1 rounded transition-colors ${
+                      viewMenuOpen
+                        ? "border-stone-500 bg-stone-100 text-stone-900"
+                        : "border-stone-300 bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100"
+                    }`}
+                    title="View density — compact layout and collapsing team lanes"
+                  >
+                    <SlidersHorizontal className="w-3 h-3" />
+                    <span className="hidden sm:inline">View</span>
+                    <span className="text-[9px] leading-none">▾</span>
+                  </button>
+                  {viewMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setViewMenuOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1.5 z-50 bg-white border border-stone-200 rounded-lg shadow-xl py-1.5 min-w-[230px]">
+                        {activeView === "roadmap" && (
+                          <button
+                            role="menuitemcheckbox"
+                            aria-checked={compactView}
+                            onClick={() => setCompactView((v) => {
+                              const next = !v;
+                              try { localStorage.setItem("roadmap-compact-view", String(next)); } catch {}
+                              return next;
+                            })}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                            title={compactView
+                              ? "Compact view ON — each column flows independently. Click to align team rows across all columns."
+                              : "Compact view OFF — team rows align across all columns. Click for the compact, independent layout."}
+                          >
+                            {compactView
+                              ? <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                              : <Square className="w-3.5 h-3.5 text-stone-300" />}
+                            <Rows3 className="w-3.5 h-3.5 opacity-70" />
+                            Compact layout
+                          </button>
+                        )}
+                        {collapseScopeIds.length > 0 && (
+                          <button
+                            role="menuitemcheckbox"
+                            aria-checked={allScopedCollapsed}
+                            onClick={toggleCollapseAll}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-700 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                            title={allScopedCollapsed ? "Expand every team lane" : "Collapse every team lane"}
+                          >
+                            {allScopedCollapsed
+                              ? <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                              : <Square className="w-3.5 h-3.5 text-stone-300" />}
+                            <ChevronDown className={`w-3.5 h-3.5 opacity-70 transition-transform ${allScopedCollapsed ? "-rotate-90" : ""}`} />
+                            Collapse all lanes
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Live cloud status — always visible (never tucked into the menu) */}
+              {cloudEnabled && !isPreview && (
+                <button
+                  onClick={() => setCloudModalOpen(true)}
+                  className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2 sm:px-2.5 py-1 rounded transition-colors ${
+                    cloudSaveState === "error"
+                      ? "border-red-300 bg-red-50 hover:bg-red-100 text-red-700 hover:border-red-400"
+                      : "border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 hover:text-violet-900 hover:border-violet-400"
+                  }`}
+                  title="Save to the cloud (auto-save) and manage your roadmaps"
+                >
+                  <Cloud className="w-3 h-3" />
+                  {/* Label hides on mobile, but "saving" and "failed" keep a one-glyph tell */}
+                  <span className="hidden sm:inline">
+                    {cloudRoadmap
+                      ? (cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Save failed" : "Synced")
+                      : "Cloud"}
+                  </span>
+                  {cloudRoadmap && cloudSaveState === "saving" && <span className="sm:hidden leading-none">…</span>}
+                  {cloudRoadmap && cloudSaveState === "error" && <span className="sm:hidden leading-none">!</span>}
+                </button>
+              )}
+              {cloudEnabled && !isPreview && cloudRoadmap && (
+                <button
+                  onClick={handlePublish}
+                  disabled={cloudPublishing || publishChecking || !cloudUnpublished}
+                  className={`flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border px-2 sm:px-2.5 py-1 rounded transition-colors ${
+                    cloudUnpublished
+                      ? "border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-800"
+                      : "border-stone-200 bg-white text-stone-400 cursor-default"
+                  }`}
+                  title={cloudUnpublished ? "Publish your changes so viewers see the latest (checks first that nothing newer is already published)" : "All changes published — viewers see the latest"}
+                >
+                  {/* Full wording on desktop, the state glyph alone on mobile */}
+                  <span className="hidden sm:inline">
+                    {publishChecking ? "Checking…" : cloudPublishing ? "Publishing…" : cloudUnpublished ? "● Publish" : "Published ✓"}
+                  </span>
+                  <span className="sm:hidden leading-none">
+                    {publishChecking || cloudPublishing ? "…" : cloudUnpublished ? "●" : "✓"}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
+        </div>
+
+        {/* Header — title, view tabs. Scrolls away normally; only the bar above is pinned. */}
+        <div className="max-w-[1800px] mx-auto mb-6">
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             <div className="flex items-center gap-3 min-w-0">
             {editingHeading && !isPreview ? (
@@ -2743,9 +2853,8 @@ export default function RoadmapTracker() {
           })}
         </div>
 
-        {/* Add Team + Collapse all + Quarter Summary buttons */}
+        {/* Add Team + Quarter Summary buttons ("Collapse all" moved into the top-bar View menu) */}
         {(() => {
-          const allTeamsCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => collapsedTeams.includes(t.id));
           const showSummary = !isPreview || (displayData.summary || "").trim();
           if (isPreview && !showSummary && displayData.teams.length === 0) return null;
           return (
@@ -2758,16 +2867,6 @@ export default function RoadmapTracker() {
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Add Team Row
-                </button>
-              )}
-              {displayData.teams.length > 0 && (
-                <button
-                  onClick={() => persistCollapsedTeams(allTeamsCollapsed ? [] : displayData.teams.map((t) => t.id))}
-                  className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
-                  title={allTeamsCollapsed ? "Expand every team row" : "Collapse every team row"}
-                >
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${allTeamsCollapsed ? "-rotate-90" : ""}`} />
-                  {allTeamsCollapsed ? "Expand all" : "Collapse all"}
                 </button>
               )}
               {showSummary && (
@@ -2991,23 +3090,6 @@ export default function RoadmapTracker() {
               );
             })()}
 
-            {/* Collapse all / Expand all */}
-            {displayData.teams.length > 0 && (() => {
-              const allLanesCollapsed = displayData.teams.every((t) => collapsedTeams.includes(t.id));
-              return (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    onClick={() => persistCollapsedTeams(allLanesCollapsed ? [] : displayData.teams.map((t) => t.id))}
-                    className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
-                    title={allLanesCollapsed ? "Expand every swim lane" : "Collapse every swim lane"}
-                  >
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${allLanesCollapsed ? "-rotate-90" : ""}`} />
-                    {allLanesCollapsed ? "Expand all" : "Collapse all"}
-                  </button>
-                </div>
-              );
-            })()}
-
             {/* Strategic footer */}
             <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
               {!isPreview && <span><span className="font-bold">Click</span> any item to open it and assign a strategic category</span>}
@@ -3162,31 +3244,6 @@ export default function RoadmapTracker() {
                 )}
               </div>
 
-              {/* Collapse all / Expand all — only touches lanes actually shown for this quarter.
-                  The collapsed set is shared with the other views, so both directions are scoped to
-                  what's on screen: teams with nothing this quarter are left exactly as they were. */}
-              {(() => {
-                const lanesShown = displayData.teams.filter((t) => timelineItems.some((i) => i.teamId === t.id));
-                if (lanesShown.length === 0) return null;
-                const shownIds = lanesShown.map((t) => t.id);
-                const allLanesCollapsed = shownIds.every((id) => collapsedTeams.includes(id));
-                return (
-                  <div className="mt-4 flex justify-center">
-                    <button
-                      onClick={() => persistCollapsedTeams(
-                        allLanesCollapsed
-                          ? collapsedTeams.filter((id) => !shownIds.includes(id))
-                          : [...new Set([...collapsedTeams, ...shownIds])]
-                      )}
-                      className="flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase border border-stone-300 bg-white hover:bg-stone-100 text-stone-600 hover:text-stone-900 hover:border-stone-500 px-4 py-2 rounded transition-colors"
-                      title={allLanesCollapsed ? "Expand every swim lane" : "Collapse every swim lane"}
-                    >
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${allLanesCollapsed ? "-rotate-90" : ""}`} />
-                      {allLanesCollapsed ? "Expand all" : "Collapse all"}
-                    </button>
-                  </div>
-                );
-              })()}
 
               <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
                 {!isPreview && <span><span className="font-bold">Click</span> any initiative to set its outcome metric</span>}
@@ -3250,8 +3307,6 @@ export default function RoadmapTracker() {
             );
           }
 
-          const allLanesCollapsed = displayData.teams.length > 0 && displayData.teams.every((t) => collapsedTeams.includes(t.id));
-
           return (
             <div className="w-full">
               {/* Legend + resolution switch */}
@@ -3300,12 +3355,6 @@ export default function RoadmapTracker() {
                 <div className="flex">
                   <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center gap-2 px-4" style={{ width: LABEL, height: 36 }}>
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">Workstream</span>
-                    <button
-                      onClick={() => persistCollapsedTeams(allLanesCollapsed ? [] : displayData.teams.map((t) => t.id))}
-                      title={allLanesCollapsed ? "Expand every workstream lane" : "Collapse every workstream lane"}
-                      className="ml-auto text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400 hover:text-stone-800 transition-colors">
-                      {allLanesCollapsed ? "Expand all" : "Collapse all"}
-                    </button>
                   </div>
                   <div className="relative flex-shrink-0" style={{ width: totalW, height: 36 }}>
                     {segments.map((seg) => {

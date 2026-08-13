@@ -7,6 +7,41 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.27.0 — 2026-08-13
+
+- **Compact view and Collapse all merged into one `View ▾` menu** in the top bar. They're both
+  density controls, but sat at opposite ends of the page — compact view up top, Collapse all at
+  the foot of each view.
+- **The four `Collapse all` buttons are gone** — three from the bottom of the roadmap, innovation
+  and impact views, plus the inline one in the Gantt's Workstream header. One control, one place.
+- **Scoping is unchanged.** The Impact view's collapse still only touches lanes with items in the
+  selected quarter; every other view still means every team. This now lives in one
+  `collapseScopeIds` memo instead of being re-derived per view.
+- **The action bar is sticky.** Without it, moving Collapse all to the top would have meant
+  scrolling a long board back up to fold the lanes. Sits at `z-[45]` — above the Gantt's own
+  sticky header and label column, below the modals. It is a **direct child of the page container**
+  by necessity: a sticky element only sticks within its own parent's box, so while it was nested
+  in the header block it unpinned as soon as that block scrolled past.
+- The title and view tabs are **not** pinned — they scroll away as before. Only the action bar
+  stays.
+- The View menu only renders where it has something to offer: the compact-layout row is
+  roadmap-only, and the whole button hides when there are no lanes to collapse.
+
+## 4.26.0 — 2026-08-13
+
+- **Top bar reworked for mobile.** On a phone the header CTAs bunched together and pushed
+  Help off-screen, needing a horizontal scroll to reach it.
+- **`Actions ▾` is now a burger icon, pinned top-left** on mobile and desktop alike. Its menu
+  opens left-aligned; contents and handlers are unchanged (Undo, Share, CSV, JSON, Reset).
+- **Help moved into the burger menu**, above Reset — it's a once-ever click and didn't earn a
+  permanent slot in the bar.
+- **Labels drop below the `sm` breakpoint.** Compact View becomes its icon alone; Cloud keeps
+  the cloud glyph plus a `…`/`!` tell while saving or after a failure; Publish shows `●`/`✓`.
+  Full wording returns at `sm` and up, so desktop is unchanged.
+- **The roadmap title no longer looks like a button.** It had the same bordered-box chrome as
+  the CTAs beside it; it's now a dashed-underline label that still opens on click, and
+  truncates instead of squeezing its neighbours.
+
 ## 4.25.0 — 2026-08-12
 
 - **Security fix: the published-roadmap table could be dumped by anyone.**
