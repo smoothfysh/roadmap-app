@@ -82,7 +82,8 @@ Stored in `localStorage` under key `roadmap-data` (or `roadmap-data-{scope}` for
 - **Collapse all lanes**: one control in the `View ▾` menu, driven by `collapseScopeIds`. Scope is per-view: every team, except in the Impact view, which only touches lanes with items in the selected quarter (teams with nothing that quarter keep whatever state they had). The collapsed set itself is shared across all views — `TEAMS_COLLAPSE_KEY`. Sticky is load-bearing here: it's what keeps the control reachable on a long board.
 - **Drag-and-drop**: HTML5 native drag; dragging is disabled while an item is expanded.
 - **Migration**: `useEffect` repairs stale `localStorage` data on load (colour renames, orphan team IDs from old CSV imports).
-- **Reset**: Always resets to blank `seedData` — does not restore any previous file.
+- **Reset**: Always resets to blank `seedData` — does not restore any previous file. Eraser icon, amber — it wipes content only.
+- **Delete roadmap**: The destructive twin of Reset (Trash2, red), below it in the burger menu. Destroys the roadmap itself: the Supabase working *and* published rows via the `delete_roadmap` RPC, the local content, the edit key (its "My roadmaps" entry), and the view prefs — with an optional checkbox escalating to a whole-browser wipe of every `roadmap-` key. **The server delete runs first and aborts the whole thing on failure**: the local list entry is the only copy of the edit key, so wiping it before a failed delete strands the roadmap in the cloud, published and unremovable. Gated by a type-`DELETE` modal (no backdrop-click close, Escape ignored while in flight) that offers a JSON backup first. Ends with `window.location.replace` onto the bare URL — a hard reload is what guarantees no in-flight debounced auto-save writes the deleted roadmap back. Local wipes go through `wipeLocalRoadmap` / `wipeAllRoadmapStorage` (top of App.jsx); the latter sweeps by `roadmap-` prefix, so **any new localStorage key must carry that prefix** or it silently survives.
 
 ## Supabase cloud sync
 
@@ -99,7 +100,9 @@ URLs: `?id=…&key=…` opens the editable working copy; `?id=…` alone opens t
 
 ### Security model — read this before touching any policy or grant
 
-**Neither table grants any direct access to any role.** Both have RLS enabled with **no policies at all**. Every read and write goes through a `SECURITY DEFINER` function that checks a capability: `create_roadmap`, `load_working`, `save_working`, `publish` (edit key) and `get_published` (id).
+**Neither table grants any direct access to any role.** Both have RLS enabled with **no policies at all**. Every read and write goes through a `SECURITY DEFINER` function that checks a capability: `create_roadmap`, `load_working`, `save_working`, `publish`, `delete_roadmap` (edit key) and `get_published` (id).
+
+`delete_roadmap` (added 4.32.0, `supabase/migrate-03-delete-roadmap.sql`) removes both rows. It requires the **edit key**, not the id — the capability to change a roadmap is the capability to destroy it; the id alone must never delete. It deletes from `roadmap_published` and `roadmap_working` explicitly rather than relying on the FK cascade, so a project provisioned before that `on delete cascade` clause can't orphan a published row and keep serving a "deleted" roadmap. Note `trg_broadcast_published` is AFTER INSERT OR UPDATE only, so a delete sends no realtime signal: a viewer with the page already open keeps showing stale content until reload.
 
 This is load-bearing, not belt-and-braces. The anon key is public by design — it ships in the JS bundle and is readable by anyone who loads the site — so **a table grant is a public grant**. In v4.25.0 `roadmap_published` carried `for select using (true)` + `grant select to anon`, and because PostgREST does not require a filter, `GET /rest/v1/roadmap_published?select=data` returned every published roadmap to anyone. Found by internal security review; closed in 4.25.0. Do not reintroduce it — and note that an id-only grant is just as bad, because the id *is* the secret.
 

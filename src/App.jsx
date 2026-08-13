@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info, Link2, Menu, SlidersHorizontal, CheckSquare, Square } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, Circle, Download, Upload, Share2, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, Repeat, Rows3, FileText, Copy, Check, Cloud, HelpCircle, Info, Link2, Menu, SlidersHorizontal, CheckSquare, Square, Eraser } from "lucide-react";
 import { version } from "../package.json";
 import { supabase, cloudEnabled } from "./supabaseClient";
-import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
+import { createRoadmap, loadWorking, saveWorking, listLocalRoadmaps, rememberRoadmap, forgetRoadmap, deleteRoadmap, editLink, viewLink, publishRoadmap, loadPublished, loadPublishedRow, stableStringify } from "./cloud";
 
 // Single app-wide version shown in every tab footer — sourced from package.json.
 // Bump the "version" field there on significant changes.
@@ -57,6 +57,42 @@ const LEGACY_COLLAPSE_KEYS = [
   `roadmap-strategic-collapsed-${VIEW_PREF_SCOPE}`,
   `roadmap-impact-collapsed-${VIEW_PREF_SCOPE}`,
 ];
+
+// ---------- Local storage wipes (used only by "Delete roadmap") ----------
+// Everything this app persists lives under a `roadmap-` prefix, which is what makes a
+// clean sweep possible at all: roadmap content (`roadmap-data*`, `roadmap-cloud-<id>`),
+// the cloud list (`roadmap-cloud-list`), and view prefs (`roadmap-gantt-zoom-*`,
+// `roadmap-teams-collapsed-*`, `roadmap-compact-view`). Keep that prefix on any new key
+// or the wipes will quietly leave it behind.
+//
+// Removes just the roadmap you're looking at, plus the view prefs scoped to it. Other
+// local copies, other cloud roadmaps and the rest of the cloud list are untouched.
+// Does NOT touch the server — the caller does that first (see handleDeleteRoadmap).
+const wipeLocalRoadmap = (cloudId) => {
+  const keys = [
+    cloudId ? cloudStorageKey(cloudId) : STORAGE_KEY,
+    GANTT_ZOOM_KEY,
+    TEAMS_COLLAPSE_KEY,
+    ...LEGACY_COLLAPSE_KEYS,
+  ];
+  keys.forEach((k) => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+};
+
+// Factory reset of the whole browser: every local roadmap, every saved shared copy, the
+// entire "My roadmaps" list and all view prefs. Enumerate-then-delete (not delete while
+// iterating) because removeItem reindexes localStorage under you and a live loop skips
+// entries. The cloud list going means every edit key in it goes — those keys exist
+// nowhere else, since the server stores only bcrypt hashes.
+const wipeAllRoadmapStorage = () => {
+  try {
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("roadmap-")) doomed.push(k);
+    }
+    doomed.forEach((k) => localStorage.removeItem(k));
+  } catch { /* ignore */ }
+};
 
 const readCollapsedIds = (key) => {
   try {
@@ -1103,6 +1139,13 @@ export default function RoadmapTracker() {
   const [cloudViewError, setCloudViewError] = useState(false);  // ?id= view: roadmap not published / not found
   const [cloudViewId, setCloudViewId] = useState(null);         // id of a published roadmap being viewed (drives realtime)
   const [cloudLive, setCloudLive] = useState(false);            // realtime channel subscribed
+  // "Delete roadmap" — the destructive one. Gated behind a type-to-confirm modal because
+  // it can destroy cloud edit keys, and nothing can bring those back.
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState(""); // must read DELETE
+  const [deleteWipeAll, setDeleteWipeAll] = useState(false);      // escalate to a whole-browser wipe
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false); // top-bar burger menu
   const [viewMenuOpen, setViewMenuOpen] = useState(false);       // top-bar "View ▾" density dropdown
   const [undoStack, setUndoStack] = useState([]);                // in-session undo snapshots (lost on refresh)
@@ -1362,6 +1405,15 @@ export default function RoadmapTracker() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [summaryModalOpen]);
+
+  // Escape closes the delete modal — but not mid-delete, where the RPC is already in
+  // flight and closing would hide whether it succeeded.
+  useEffect(() => {
+    if (!deleteModalOpen) return;
+    const handler = (e) => { if (e.key === "Escape" && !deleteBusy) setDeleteModalOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [deleteModalOpen, deleteBusy]);
 
   // Debounced auto-save of the working copy to Supabase whenever data changes in cloud mode.
   useEffect(() => {
@@ -2016,6 +2068,52 @@ export default function RoadmapTracker() {
     saveData(seedData);
   };
 
+  // ---------- Delete roadmap ----------
+  // Reset empties the board; this destroys the roadmap itself — the cloud rows, the
+  // local copy, the view prefs, and (optionally) everything else this browser holds.
+  // Only reachable through the type-to-confirm modal below.
+  //
+  // Order matters: the SERVER goes first. If the RPC fails we stop with the local data
+  // still intact, because the local "My roadmaps" entry holds the only copy of the edit
+  // key — wipe that before a failed delete and the roadmap is stranded in the cloud,
+  // published and unremovable, forever. Local-only roadmaps skip straight to the wipe.
+  const openDeleteModal = () => {
+    setDeleteConfirmText("");
+    setDeleteWipeAll(false);
+    setDeleteError("");
+    setDeleteBusy(false);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteRoadmap = async () => {
+    if (deleteConfirmText.trim().toUpperCase() !== "DELETE") return;
+    setDeleteBusy(true);
+    setDeleteError("");
+
+    if (cloudRoadmap) {
+      try {
+        await deleteRoadmap(cloudRoadmap.id, cloudRoadmap.key);
+      } catch (e) {
+        console.error("Cloud delete failed:", e);
+        setDeleteBusy(false);
+        setDeleteError(
+          "Couldn't delete the cloud copy: " + (e?.message || e) +
+          " — nothing was removed. Your edit link still works, so you can try again."
+        );
+        return;
+      }
+    }
+
+    if (deleteWipeAll) wipeAllRoadmapStorage();
+    else wipeLocalRoadmap(cloudRoadmap?.id);
+
+    // Hard reload onto the bare URL. Dropping ?id=&key= (and ?scope=) is the point —
+    // the roadmap they name no longer exists — and reloading is the only way to be sure
+    // no in-flight debounced auto-save or realtime subscription writes the deleted
+    // roadmap back out from React state that's still holding it.
+    window.location.replace(window.location.origin + window.location.pathname);
+  };
+
   // ---------- Derived display state ----------
   const displayData = sharedPreview ?? data;
   const isPreview = !!sharedPreview;
@@ -2657,12 +2755,21 @@ export default function RoadmapTracker() {
 
                       {!isPreview && (
                         <>
+                          {/* Two destructive actions, deliberately distinct. Reset only wipes the
+                              CONTENT (Eraser — the board survives, blank); Delete destroys the
+                              roadmap itself, cloud rows and edit key included (Trash2). */}
                           <div className="h-px bg-stone-100 my-1 mx-2" />
                           <button
                             onClick={() => { setActionsMenuOpen(false); resetToSeed(); }}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-amber-700 hover:bg-amber-50 px-3 py-2 transition-colors"
+                          >
+                            <Eraser className="w-3.5 h-3.5 opacity-70" /> Reset roadmap
+                          </button>
+                          <button
+                            onClick={() => { setActionsMenuOpen(false); openDeleteModal(); }}
                             className="w-full flex items-center gap-2.5 text-left text-[12px] text-red-700 hover:bg-red-50 px-3 py-2 transition-colors"
                           >
-                            <Trash2 className="w-3.5 h-3.5 opacity-70" /> Reset roadmap
+                            <Trash2 className="w-3.5 h-3.5 opacity-70" /> Delete roadmap
                           </button>
                         </>
                       )}
@@ -3749,6 +3856,88 @@ export default function RoadmapTracker() {
           </div>
         </div>
       )}
+
+      {/* Delete-roadmap modal — type-to-confirm. No backdrop-click close and no Escape
+          while it's working: this is the one action in the app that can destroy a cloud
+          edit key, and a key is unrecoverable (the server keeps only a bcrypt hash). */}
+      {deleteModalOpen && (() => {
+        const armed = deleteConfirmText.trim().toUpperCase() === "DELETE";
+        const doomed = [
+          cloudRoadmap
+            ? "The cloud copy — both the working copy and the published version. Every view link for it stops working."
+            : "This roadmap's saved content in this browser.",
+          cloudRoadmap && "Its edit key. There is no account and no backup, so the roadmap can never be reopened.",
+          "Its view preferences — collapsed lanes and Gantt zoom.",
+          deleteWipeAll && "Every OTHER roadmap in this browser: all local copies, all saved shared copies, and the whole “My roadmaps” list (i.e. the edit keys for all your other cloud roadmaps).",
+        ].filter(Boolean);
+        return (
+          <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center p-6 z-[80]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[88vh]">
+              <div className="px-5 py-4 border-b border-stone-100">
+                <div className="text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-red-700 mb-1">⚠ Permanent · cannot be undone</div>
+                <div className="text-base font-bold text-stone-900">Delete “{data.title || seedData.title}”?</div>
+              </div>
+
+              <div className="px-5 py-4 overflow-y-auto">
+                <div className="text-[12px] text-stone-600 leading-relaxed mb-2">This destroys:</div>
+                <ul className="space-y-1.5 mb-4">
+                  {doomed.map((line, i) => (
+                    <li key={i} className="flex gap-2 text-[12px] text-stone-700 leading-relaxed">
+                      <span className="text-red-500 mt-px">✕</span><span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="flex flex-wrap items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5 mb-4">
+                  <span className="text-[11px] text-stone-600 leading-snug flex-1">Want a copy first? A JSON backup restores everything except the cloud link.</span>
+                  <button
+                    onClick={exportBackup}
+                    className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider border border-stone-300 hover:bg-white text-stone-700 rounded px-2.5 py-1.5 transition-colors"
+                  >
+                    <Download className="w-3 h-3" /> Backup JSON
+                  </button>
+                </div>
+
+                <label className="flex items-start gap-2 text-[12px] text-stone-600 leading-snug cursor-pointer mb-4">
+                  <input type="checkbox" checked={deleteWipeAll} onChange={(e) => setDeleteWipeAll(e.target.checked)} className="mt-0.5" />
+                  <span>Also erase <strong>every other roadmap</strong> stored in this browser — a full factory reset. Cloud roadmaps you have edit links saved for elsewhere survive on the server; ones you don’t are lost.</span>
+                </label>
+
+                <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">Type DELETE to confirm</label>
+                <input
+                  autoFocus
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && armed && !deleteBusy) handleDeleteRoadmap(); }}
+                  placeholder="DELETE"
+                  className="w-full text-[13px] font-mono tracking-widest text-stone-800 border border-stone-300 focus:border-red-400 rounded px-2.5 py-2 outline-none transition-colors"
+                />
+
+                {deleteError && (
+                  <div className="mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-[11px] text-red-800 leading-relaxed">{deleteError}</div>
+                )}
+              </div>
+
+              <div className="px-5 py-3 border-t border-stone-100 flex justify-end gap-2">
+                <button
+                  onClick={() => setDeleteModalOpen(false)}
+                  disabled={deleteBusy}
+                  className="text-[13px] font-semibold text-stone-600 hover:text-stone-900 disabled:opacity-40 px-4 py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteRoadmap}
+                  disabled={!armed || deleteBusy}
+                  className="flex items-center gap-1.5 text-[13px] font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> {deleteBusy ? "Deleting…" : "Delete forever"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Pre-publish safety modal — the live published version moved on since we loaded,
           or we couldn't check. Publishing would overwrite it, so confirm first. */}

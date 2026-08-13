@@ -10,6 +10,10 @@
 -- migration files instead — migrate-01-published-read-rpc.sql, then deploy the
 -- app, then migrate-02-revoke-public-read.sql.
 --
+-- EXISTING project already on the 4.25.0+ schema and only missing delete_roadmap
+-- (added in 4.32.0): running this whole file is fine, but the one-function
+-- migrate-03-delete-roadmap.sql is the smaller change.
+--
 -- Safe to run more than once (idempotent).
 -- ============================================================
 
@@ -130,12 +134,37 @@ as $$
    where r.id = p_id;
 $$;
 
+-- Delete a roadmap outright — working copy AND published copy. Requires the correct
+-- key: the capability that lets you change a roadmap is the one that lets you destroy
+-- it, so the id alone (the view capability) is not enough. Irreversible — every ?id=
+-- view link goes dead and the edit key unlocks nothing.
+--
+-- Both deletes are explicit rather than leaning on the published→working FK cascade.
+-- The cascade would do it, but a project provisioned before that clause landed would
+-- silently orphan the published row — the roadmap would keep serving to viewers after
+-- a "successful" delete. Deleting both by hand cannot fail that way.
+create or replace function public.delete_roadmap(p_id text, p_key text)
+returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_ok boolean;
+begin
+  select true into v_ok from roadmap_working
+   where id = p_id and edit_key_hash = crypt(p_key, edit_key_hash);
+  if v_ok is null then raise exception 'not found or wrong key'; end if;
+
+  delete from roadmap_published where id = p_id;
+  delete from roadmap_working   where id = p_id;
+end;
+$$;
+
 -- 5. Allow the public (anon) role to call the functions ------
 grant execute on function public.create_roadmap(jsonb, text)          to anon;
 grant execute on function public.load_working(text, text)             to anon;
 grant execute on function public.save_working(text, text, jsonb, text) to anon;
 grant execute on function public.publish(text, text)                  to anon;
 grant execute on function public.get_published(text)                  to anon;
+grant execute on function public.delete_roadmap(text, text)           to anon;
 
 -- 6. Realtime — broadcast, NOT Postgres Changes --------------
 --

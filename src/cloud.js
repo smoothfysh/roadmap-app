@@ -27,6 +27,9 @@ export function rememberRoadmap(entry) {
 export function forgetRoadmap(id) {
   localStorage.setItem(LIST_KEY, JSON.stringify(listLocalRoadmaps().filter((r) => r.id !== id)));
 }
+// The whole-browser wipe in App.jsx (wipeAllRoadmapStorage) clears this list too, by
+// sweeping every `roadmap-` key. LIST_KEY carries that prefix on purpose — renaming it
+// to something else would silently survive the wipe, leaving dead edit keys behind.
 
 // ---------- Link builders ----------
 const base = () => `${window.location.origin}${window.location.pathname}`;
@@ -61,6 +64,19 @@ export async function saveWorking(id, key, data) {
   const { error } = await supabase.rpc("save_working", { p_id: id, p_key: key, p_data: data, p_title: title });
   if (error) throw error;
   rememberRoadmap({ id, key, title });
+}
+
+// Delete the roadmap outright — the private working copy AND the published copy the
+// viewers see. Requires the correct key, so the id alone can't destroy anything.
+//
+// Irreversible: after this, every ?id=… view link 404s and the edit key unlocks
+// nothing. The server keeps no backup and no soft-delete tombstone. Needs the
+// delete_roadmap RPC (supabase/migrate-03-delete-roadmap.sql) — without it this
+// throws a 404-ish PostgREST error rather than silently doing nothing.
+export async function deleteRoadmap(id, key) {
+  const { error } = await supabase.rpc("delete_roadmap", { p_id: id, p_key: key });
+  if (error) throw error;
+  forgetRoadmap(id);
 }
 
 // Publish working → published.

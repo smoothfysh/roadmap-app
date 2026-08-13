@@ -7,6 +7,30 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.32.0 — 2026-08-13
+
+- **New: "Delete roadmap" in the burger menu.** Where *Reset* only empties the board, *Delete*
+  destroys the roadmap itself: the Supabase working copy **and** the published copy, the local
+  saved content, the cloud edit key, and the view preferences. An optional checkbox escalates it
+  to a full factory reset of the browser — every local roadmap, every saved shared copy and the
+  whole "My roadmaps" list.
+- **Gated behind a type-to-confirm modal.** It lists exactly what will be destroyed, offers a
+  JSON backup first, and requires typing `DELETE`. No backdrop-click dismissal, and Escape is
+  ignored while the delete is in flight. This is the only action in the app that can destroy a
+  cloud edit key, and a key is unrecoverable — the server stores only a bcrypt hash.
+- **Server delete goes first.** If the RPC fails, nothing local is touched and the error is shown
+  in the modal, because the local "My roadmaps" entry holds the only copy of the edit key —
+  wiping it before a failed delete would strand the roadmap in the cloud, published and
+  unremovable.
+- **Requires a one-off SQL migration:** `supabase/migrate-03-delete-roadmap.sql` adds a
+  `delete_roadmap(p_id, p_key)` `SECURITY DEFINER` function that verifies the edit key, then
+  removes both rows. Purely additive — no new policies and no table grants, so the RLS posture is
+  unchanged and older browser tabs are unaffected. Run it *before* deploying this build. The same
+  function is folded into `phase0-schema.sql` for fresh projects.
+- **Changed: the Reset icon is now an eraser, not a bin.** Reset wipes content and leaves the
+  board standing, so the bin was misleading — it now belongs to Delete. Reset is also amber
+  rather than red, to separate "clear this out" from "destroy this".
+
 ## 4.31.0 — 2026-08-13
 
 - **Fixed: the Gantt's month/date header no longer hides behind the action bar when you scroll.**
