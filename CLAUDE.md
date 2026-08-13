@@ -122,6 +122,7 @@ Revoking access breaks any browser tab still running an older bundle, so split a
 - `vite.config.js` has `base: '/'` — must match the custom domain root.
 - `public/CNAME` contains `roadmap.cadence-x.com` — do not remove or the custom domain breaks.
 - `public/roadmap.csv` is the seed CSV loaded on first visit (before any `localStorage` exists). Updating this file and deploying changes what new visitors see.
+- `public/sample-roadmap.json` / `public/sample-roadmap.csv` are the try-me fixtures behind the burger menu's **Download sample JSON / CSV**, for testing Restore JSON and Import CSV. A fictional apparel platform ("Threadhouse"), 36 items over 9 workstreams, written to hit every feature: all five flags, all four strategic categories, every outcome type, all three tag-style branches (known `DE`, known combo `FR/DE`, unlisted combo `ES/IT`, unknown single `NL`), every date-pill format, milestones, unscheduled items, a markdown summary, ten link providers plus an unrecognised host, and one item still on legacy `jiraUrl`/`confluenceUrl`. **Only the JSON is hand-edited** — regenerate the CSV with `node scripts/build-sample-csv.mjs`, which reuses the app's own `CSV_ITEM_HEADERS`. That script flattens newlines because `csvToItems` splits on `\n` *before* parsing quotes, so a multi-line description silently splits the record and nulls every field after it (a real importer bug the app's own CSV export also trips over). Links go through `import.meta.env.BASE_URL`, not a leading slash, so they resolve under the company build's `--base=./`.
 
 ## Do not break
 

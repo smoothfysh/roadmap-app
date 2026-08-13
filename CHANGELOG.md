@@ -7,6 +7,33 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.33.0 — 2026-08-13
+
+- **New: downloadable sample roadmap, as JSON and as CSV.** Two entries in the burger menu —
+  *Download sample CSV* under the CSV section and *Download sample JSON* under JSON — give you
+  files to try **Restore JSON** and **Import CSV** against without inventing content first.
+- **The content is a fictional apparel ecommerce platform** ("Threadhouse"): 36 items across 9
+  workstreams — Payments, Checkout & Cart, Authentication, Search & Discovery, Catalogue & Sizing,
+  Fulfilment & Returns, Customer Service, Mobile App, Data & Personalisation.
+- **It's a fixture, not filler** — it deliberately exercises every feature: all five status flags,
+  all four strategic categories, all three outcome types (revenue with a range, KPI metric up and
+  down, cost saving both "reduce" and "utilise"), enables/supports notes, country tags including a
+  known combo (`FR/DE`), an unlisted combo (`ES/IT`) and an unknown single (`NL`), every date-pill
+  format the parser handles, Gantt bars with milestones, unscheduled items, a markdown quarter
+  summary, links across ten providers plus an unrecognised host, one item still on the legacy
+  `jiraUrl`/`confluenceUrl` fields, and a workstream with a codename (`AUTHENTICATION (aka
+  FIREFLY)`) to show the Gantt label split.
+- **The CSV is generated from the JSON**, not maintained beside it — `scripts/build-sample-csv.mjs`
+  re-emits it using the app's own `CSV_ITEM_HEADERS` and escaping. Edit the JSON, re-run the script.
+- **Sample descriptions are single-line in the CSV on purpose.** `csvToItems` splits on newlines
+  *before* it parses quotes, so a newline inside a quoted field splits the record: with paragraph
+  breaks left in, these 36 items parse back as 44 rows and everything after `description` reads as
+  null. The generator flattens newlines so the sample imports cleanly. (The importer's handling of
+  quoted newlines is a separate pre-existing bug — the app's own CSV export hits it too.)
+- Files ship in `public/`, so they cost nothing in the bundle and can be linked directly. Paths go
+  through `import.meta.env.BASE_URL` so they resolve on both the custom-domain and the `--base=./`
+  company build.
+
 ## 4.32.0 — 2026-08-13
 
 - **New: "Delete roadmap" in the burger menu.** Where *Reset* only empties the board, *Delete*

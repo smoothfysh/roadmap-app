@@ -58,6 +58,19 @@ const LEGACY_COLLAPSE_KEYS = [
   `roadmap-impact-collapsed-${VIEW_PREF_SCOPE}`,
 ];
 
+// ---------- Sample files ----------
+// The two try-me fixtures in public/. They're static assets rather than a constant in
+// this bundle so the ~30KB of sample content isn't shipped to every visitor, and so the
+// files can be linked to directly.
+//
+// BASE_URL, not a leading slash: the company build runs with `--base=./` because private
+// Pages sites are served from a randomised host whose URL depth isn't knowable at build
+// time. Vite rewrites BASE_URL per build, so this resolves on both deploys.
+//
+// sample-roadmap.csv is GENERATED from sample-roadmap.json by scripts/build-sample-csv.mjs
+// — edit the JSON, then re-run that script. Don't hand-edit the CSV.
+const sampleUrl = (name) => `${import.meta.env.BASE_URL}${name}`;
+
 // ---------- Local storage wipes (used only by "Delete roadmap") ----------
 // Everything this app persists lives under a `roadmap-` prefix, which is what makes a
 // clean sweep possible at all: roadmap content (`roadmap-data*`, `roadmap-cloud-<id>`),
@@ -2721,6 +2734,14 @@ export default function RoadmapTracker() {
                           <Upload className="w-3.5 h-3.5 opacity-70" /> Import CSV
                         </button>
                       )}
+                      <a
+                        href={sampleUrl("sample-roadmap.csv")}
+                        download="sample-roadmap.csv"
+                        onClick={() => setActionsMenuOpen(false)}
+                        className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-500 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5 opacity-70" /> Download sample CSV
+                      </a>
 
                       {!isPreview && (
                         <>
@@ -2738,6 +2759,14 @@ export default function RoadmapTracker() {
                           >
                             <Upload className="w-3.5 h-3.5 opacity-70" /> Restore JSON
                           </button>
+                          <a
+                            href={sampleUrl("sample-roadmap.json")}
+                            download="sample-roadmap.json"
+                            onClick={() => setActionsMenuOpen(false)}
+                            className="w-full flex items-center gap-2.5 text-left text-[12px] text-stone-500 hover:bg-violet-50 hover:text-stone-900 px-3 py-2 transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5 opacity-70" /> Download sample JSON
+                          </a>
                         </>
                       )}
 
