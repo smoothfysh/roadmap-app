@@ -7,6 +7,26 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.35.0 — 2026-08-13
+
+- **The sample roadmap now looks like a real roadmap: 36 items → 102.** One or two items per lane
+  read as a demo stub; the point of the fixture is to show what the board feels like under a real
+  team's workload, particularly in the Gantt and the collapse-all behaviour.
+- **DONE and COMING SOON now carry 3–6 items per workstream, unevenly** — Customer Service shipped
+  six things last half while Mobile shipped three, and Data has six in flight while Search has
+  three. Even distribution is the thing that reads as fake.
+- Content is sequenced like real work rather than generated: peak-readiness items cluster in
+  Oct–Nov with a code-freeze milestone, several items are explicitly held behind a dependency
+  (homepage personalisation waits for the real-time reco service; loyalty SSO waits for passkeys;
+  the agent timeline waits for the CDP), and two items are parked as deprioritised with a reason.
+- Both files stay mirrored — `sample-roadmap.csv` is regenerated from `sample-roadmap.json` by
+  `scripts/build-sample-csv.mjs`, and the round-trip test confirms all 102 records match field for
+  field.
+- Coverage went up with the volume: 15 link providers (adds Linear, GitLab, SharePoint, Condens),
+  20 items with milestones, 15 multi-paragraph descriptions, 7 unscheduled items, 9 at-risk and 2
+  blocked. All five flags, all four strategic categories, all outcome types and all three tag-style
+  branches are still represented.
+
 ## 4.34.0 — 2026-08-13
 
 - **Fixed: importing a CSV no longer destroys items with multi-paragraph descriptions.**
