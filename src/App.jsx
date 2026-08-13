@@ -2336,17 +2336,6 @@ export default function RoadmapTracker() {
       : [...new Set([...collapsedTeams, ...collapseScopeIds])]
   );
 
-  // Status key for the per-item dots. It lives in the footer help row rather than beside the
-  // heading: up there it was three unlabelled circles whose meaning sat in `title` tooltips, which
-  // never fire on touch. Down here it sits with the text that explains the same dots.
-  const statusLegend = (
-    <span className="flex items-center gap-3">
-      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />On track</span>
-      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" />At risk</span>
-      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" />Blocked</span>
-    </span>
-  );
-
   // Today as an ISO string, for comparing against milestone dates (solid diamond once passed).
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
@@ -2912,15 +2901,13 @@ export default function RoadmapTracker() {
             <>
               <span>This is a read-only shared view — use <span className="font-bold">Save &amp; open</span> in the banner above to make your own editable copy</span>
               <span><span className="font-bold">Click</span> a team name to collapse it</span>
-              {statusLegend}
             </>
           ) : (
             <>
               <span><span className="font-bold">Click</span> any item to expand · edit title, notes, JIRA &amp; Confluence links</span>
               <span><span className="font-bold">Drag</span> any item to reorder or move between columns</span>
               <span><span className="font-bold">Click</span> a team name to collapse / expand it</span>
-              <span><span className="font-bold">Click</span> a quarter label to rename · status dot to cycle flag</span>
-              {statusLegend}
+              <span><span className="font-bold">Click</span> a quarter label to rename · status dot to cycle through and set status</span>
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}

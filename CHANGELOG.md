@@ -7,6 +7,13 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.30.0 — 2026-08-13
+
+- **Removed the status legend** (`● On track · ● At risk · ● Blocked`) from the footer help row,
+  in both the editable and read-only preview wording. Added in 4.28.0; not needed.
+- **Reworded the status-dot hint** to "Click a quarter label to rename · status dot to cycle
+  through and set status".
+
 ## 4.29.0 — 2026-08-13
 
 - **Fix: the burger and View menus only closed by clicking their own button.** Both relied on a
