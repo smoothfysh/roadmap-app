@@ -7,6 +7,15 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.31.0 — 2026-08-13
+
+- **Fixed: the Gantt's month/date header no longer hides behind the action bar when you scroll.**
+  The timeline header and the page's action bar were both pinned to `top: 0`, so the header parked
+  *underneath* the opaque bar and only its bottom sliver — the weekday initials — stayed visible.
+  The header now pins to the action bar's measured height, keeping the month names, day numbers and
+  the Today pill on screen. The height is measured with a `ResizeObserver` rather than hardcoded, so
+  it stays correct when the bar wraps to a second row on a narrow screen.
+
 ## 4.30.0 — 2026-08-13
 
 - **Removed the status legend** (`● On track · ● At risk · ● Blocked`) from the footer help row,

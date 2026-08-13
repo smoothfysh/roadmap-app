@@ -1108,6 +1108,11 @@ export default function RoadmapTracker() {
   const [undoStack, setUndoStack] = useState([]);                // in-session undo snapshots (lost on refresh)
   const ganttHeaderRef = useRef(null);
   const ganttBodyRef = useRef(null);
+  // The page's own sticky action bar sits at top:0, so anything else pinned to top:0 slides
+  // underneath it. The Gantt's timeline header is offset by this measured height instead of a
+  // hardcoded one — the bar grows a row when it wraps on a narrow screen.
+  const topBarRef = useRef(null);
+  const [topBarH, setTopBarH] = useState(0);
   const actionsMenuRef = useRef(null);   // wrapper for the burger menu — outside-click detection
   const viewMenuRef = useRef(null);      // wrapper for the View menu — outside-click detection
 
@@ -2422,6 +2427,22 @@ export default function RoadmapTracker() {
   // Leaving the Gantt (or opening an item) drops any open popover.
   useEffect(() => { setMsPop(null); }, [activeView, expandedItem]);
 
+  // Measure the sticky action bar so the Gantt header can pin directly beneath it. Re-measures on
+  // resize (the bar wraps to two rows on a phone) and whenever its contents change height.
+  useEffect(() => {
+    const el = topBarRef.current;
+    if (!el) return;
+    const measure = () => setTopBarH(el.getBoundingClientRect().height);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
@@ -2546,7 +2567,7 @@ export default function RoadmapTracker() {
             used to sit at the foot of each view — sticky is what keeps it in reach on a long board.
             z-[45] sits above the Gantt's own sticky header (z-30) and label column (z-40), below
             the modals (z-50+). The negative margin lets the background span the page padding. */}
-        <div className="sticky top-0 z-[45] -mx-6 -mt-6 px-6 py-2 mb-4 bg-stone-50/95 backdrop-blur-sm border-b border-stone-200">
+        <div ref={topBarRef} className="sticky top-0 z-[45] -mx-6 -mt-6 px-6 py-2 mb-4 bg-stone-50/95 backdrop-blur-sm border-b border-stone-200">
           <div className="max-w-[1800px] mx-auto flex items-center justify-between gap-2">
             {/* Left cluster — burger menu, then the roadmap title (a label, not a button) */}
             <div className="flex items-center gap-2 min-w-0">
@@ -3338,8 +3359,12 @@ export default function RoadmapTracker() {
                 </div>
               </div>
 
-              {/* Pinned header — coarse band (EXPANDED only) over the fine columns; syncs with the body */}
-              <div ref={ganttHeaderRef} className="sticky top-0 z-30 overflow-hidden border border-b-0 border-stone-200 rounded-t-xl bg-white">
+              {/* Pinned header — coarse band (EXPANDED only) over the fine columns; syncs with the body.
+                  Pins BELOW the page's action bar (top: its measured height), not at top:0 — both are
+                  sticky, so sharing an offset buries this one under the opaque bar and leaves only its
+                  bottom sliver (the weekday initials) showing. */}
+              <div ref={ganttHeaderRef} style={{ top: topBarH }}
+                className="sticky z-30 overflow-hidden border border-b-0 border-stone-200 rounded-t-xl bg-white">
                 {showBands && (
                   <div className="flex border-b border-stone-200">
                     <div className="sticky left-0 z-40 bg-white border-r border-stone-200 flex-shrink-0 flex items-center px-4" style={{ width: LABEL, height: 26 }}>
