@@ -2320,6 +2320,17 @@ export default function RoadmapTracker() {
       : [...new Set([...collapsedTeams, ...collapseScopeIds])]
   );
 
+  // Status key for the per-item dots. It lives in the footer help row rather than beside the
+  // heading: up there it was three unlabelled circles whose meaning sat in `title` tooltips, which
+  // never fire on touch. Down here it sits with the text that explains the same dots.
+  const statusLegend = (
+    <span className="flex items-center gap-3">
+      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />On track</span>
+      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" />At risk</span>
+      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" />Blocked</span>
+    </span>
+  );
+
   // Today as an ISO string, for comparing against milestone dates (solid diamond once passed).
   const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
@@ -2778,7 +2789,7 @@ export default function RoadmapTracker() {
         {/* Header — title, view tabs. Scrolls away normally; only the bar above is pinned. */}
         <div className="max-w-[1800px] mx-auto mb-6">
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center min-w-0">
             {editingHeading && !isPreview ? (
               <input
                 type="text"
@@ -2803,15 +2814,13 @@ export default function RoadmapTracker() {
                 {displayData.heading || seedData.heading}
               </h1>
             )}
-            <div className="flex gap-1.5 flex-shrink-0">
-              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500" title="On track"></span>
-              <span className="w-3.5 h-3.5 rounded-full bg-amber-400" title="At risk"></span>
-              <span className="w-3.5 h-3.5 rounded-full bg-rose-500" title="Blocked"></span>
             </div>
-            </div>
-            <div className="text-xs text-stone-500 font-mono text-center">
-              {isPreview ? "Read-only preview — save a copy to make edits" : "Drag items to reorder"}
-            </div>
+            {/* Editable boards say nothing here — the footer already covers dragging. */}
+            {isPreview && (
+              <div className="text-xs text-stone-500 font-mono text-center">
+                Read-only preview — save a copy to make edits
+              </div>
+            )}
           </div>
         </div>
 
@@ -2888,14 +2897,16 @@ export default function RoadmapTracker() {
           {isPreview ? (
             <>
               <span>This is a read-only shared view — use <span className="font-bold">Save &amp; open</span> in the banner above to make your own editable copy</span>
-              <span><span className="font-bold">Click</span> a team name to collapse it · the <span className="font-bold">ⓘ</span> icon for that team's details</span>
+              <span><span className="font-bold">Click</span> a team name to collapse it</span>
+              {statusLegend}
             </>
           ) : (
             <>
               <span><span className="font-bold">Click</span> any item to expand · edit title, notes, JIRA &amp; Confluence links</span>
               <span><span className="font-bold">Drag</span> any item to reorder or move between columns</span>
-              <span><span className="font-bold">Click</span> a team name to collapse / expand it · the <span className="font-bold">ⓘ</span> icon for team details &amp; rename</span>
+              <span><span className="font-bold">Click</span> a team name to collapse / expand it</span>
               <span><span className="font-bold">Click</span> a quarter label to rename · status dot to cycle flag</span>
+              {statusLegend}
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}

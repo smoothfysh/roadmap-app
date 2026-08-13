@@ -7,6 +7,18 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.28.0 — 2026-08-13
+
+- **Removed "Drag items to reorder"** from under the status legend at the top — the footer already
+  says the same thing. Read-only previews keep their own line there, which isn't a duplicate.
+- **Trimmed the ⓘ hint from the footer**, in both the editable and the read-only preview wording.
+  "Click a team name to collapse / expand it" no longer trails the icon hint.
+- **The status dots moved out of the heading and into the footer help row, with labels** — `● On
+  track · ● At risk · ● Blocked`. Beside the heading they were three unlabelled circles whose
+  meaning lived in `title` tooltips, which never fire on touch, so on a phone they read as
+  decoration. They now sit next to the text that explains the same dots, and show in the read-only
+  preview footer too.
+
 ## 4.27.0 — 2026-08-13
 
 - **Compact view and Collapse all merged into one `View ▾` menu** in the top bar. They're both
