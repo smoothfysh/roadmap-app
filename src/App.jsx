@@ -1108,6 +1108,8 @@ export default function RoadmapTracker() {
   const [undoStack, setUndoStack] = useState([]);                // in-session undo snapshots (lost on refresh)
   const ganttHeaderRef = useRef(null);
   const ganttBodyRef = useRef(null);
+  const actionsMenuRef = useRef(null);   // wrapper for the burger menu — outside-click detection
+  const viewMenuRef = useRef(null);      // wrapper for the View menu — outside-click detection
 
   // Load from localStorage if available, else fetch CSV seed
   useEffect(() => {
@@ -1383,19 +1385,33 @@ export default function RoadmapTracker() {
     return () => window.removeEventListener("keydown", handler);
   }, [cloudModalOpen, newEditLink, editLinkSaved]);
 
+  // Close a top-bar menu on Escape, or on any click outside it. These used to be full-screen
+  // backdrop divs, but the sticky header carries `backdrop-blur`, and backdrop-filter makes an
+  // element the containing block for its `position: fixed` descendants — so `fixed inset-0` was
+  // being sized to the header bar, not the viewport, and caught almost nothing. A real listener
+  // has no such dependency on stacking, and lets a click on another control both close the menu
+  // and act. `mousedown` (not `click`) so the menu goes away as the press lands; menu items sit
+  // inside the ref, so selecting one never trips this.
   useEffect(() => {
-    if (!actionsMenuOpen) return;
-    const handler = (e) => { if (e.key === "Escape") setActionsMenuOpen(false); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [actionsMenuOpen]);
-
-  useEffect(() => {
-    if (!viewMenuOpen) return;
-    const handler = (e) => { if (e.key === "Escape") setViewMenuOpen(false); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [viewMenuOpen]);
+    if (!actionsMenuOpen && !viewMenuOpen) return;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      setActionsMenuOpen(false);
+      setViewMenuOpen(false);
+    };
+    const onDown = (e) => {
+      if (actionsMenuOpen && !actionsMenuRef.current?.contains(e.target)) setActionsMenuOpen(false);
+      if (viewMenuOpen && !viewMenuRef.current?.contains(e.target)) setViewMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
+  }, [actionsMenuOpen, viewMenuOpen]);
 
   // In-session undo via Ctrl/⌘+Z (ignored while typing in a field or in read-only view).
   useEffect(() => {
@@ -2546,7 +2562,7 @@ export default function RoadmapTracker() {
             {/* Left cluster — burger menu, then the roadmap title (a label, not a button) */}
             <div className="flex items-center gap-2 min-w-0">
               {/* Menu — Share, CSV, JSON, Reset, Help. Always top-left, mobile and desktop alike. */}
-              <div className="relative shrink-0">
+              <div className="relative shrink-0" ref={actionsMenuRef}>
                 <button
                   onClick={() => setActionsMenuOpen((o) => !o)}
                   aria-haspopup="true"
@@ -2559,7 +2575,6 @@ export default function RoadmapTracker() {
                 </button>
                 {actionsMenuOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setActionsMenuOpen(false)} />
                     <div className="absolute left-0 top-full mt-1.5 z-50 bg-white border border-stone-200 rounded-lg shadow-xl py-1.5 min-w-[220px]">
                       {!isPreview && (
                         <>
@@ -2678,7 +2693,7 @@ export default function RoadmapTracker() {
                   view up here, "Collapse all" at the foot of each view); they're one menu now, so
                   the sticky header keeps both reachable without scrolling. */}
               {(activeView === "roadmap" || collapseScopeIds.length > 0) && (
-                <div className="relative">
+                <div className="relative" ref={viewMenuRef}>
                   <button
                     onClick={() => setViewMenuOpen((o) => !o)}
                     aria-haspopup="true"
@@ -2696,7 +2711,6 @@ export default function RoadmapTracker() {
                   </button>
                   {viewMenuOpen && (
                     <>
-                      <div className="fixed inset-0 z-40" onClick={() => setViewMenuOpen(false)} />
                       <div className="absolute right-0 top-full mt-1.5 z-50 bg-white border border-stone-200 rounded-lg shadow-xl py-1.5 min-w-[230px]">
                         {activeView === "roadmap" && (
                           <button

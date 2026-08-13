@@ -7,6 +7,18 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.29.0 — 2026-08-13
+
+- **Fix: the burger and View menus only closed by clicking their own button.** Both relied on a
+  full-screen `fixed inset-0` backdrop to catch outside clicks. That broke in 4.27.0 when the
+  header became sticky with `backdrop-blur-sm`: an element with `backdrop-filter` becomes the
+  containing block for its `position: fixed` descendants, so the backdrop was sized to the header
+  bar rather than the viewport and caught almost nothing.
+- **Replaced both backdrops with a real outside-click listener** keyed off refs on each menu
+  wrapper. No dependency on stacking order, and a click on another control now closes the menu
+  *and* activates that control, instead of being swallowed by an invisible overlay. Fires on
+  `mousedown`/`touchstart`, so the menu clears as the press lands; Escape still closes both.
+
 ## 4.28.0 — 2026-08-13
 
 - **Removed "Drag items to reorder"** from under the status legend at the top — the footer already
