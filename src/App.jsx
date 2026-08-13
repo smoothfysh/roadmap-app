@@ -177,12 +177,48 @@ function parseCsvLine(line) {
   return result;
 }
 
+// Split raw CSV text into records, breaking only on newlines OUTSIDE a quoted field.
+//
+// This has to be quote-aware, and until 4.34.0 it wasn't: csvToItems did a plain
+// `csvText.split(/\r?\n/)` before parseCsvLine ever saw the text. A newline inside a
+// quoted field therefore cut the record in two — the tail became a phantom row, and
+// every field after the one holding the newline (in practice `description`) read back
+// as null. Because itemsToCsv quotes multi-line descriptions correctly on the way out,
+// this meant Export CSV produced files Import CSV silently mangled: the sample fixture's
+// 36 items came back as 44 rows, losing their dates, links, milestones and revenue.
+//
+// parseCsvLine itself needed no change — a newline inside quotes is just another
+// character to it — so records are handed over whole and parsed exactly as before.
+function splitCsvRecords(csvText) {
+  const text = csvText.replace(/\r\n/g, "\n");   // normalise CRLF, including inside quotes
+  const records = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      // An escaped "" stays inside the field — consume both and keep them, since the
+      // record is re-parsed downstream and must survive verbatim.
+      if (inQuotes && text[i + 1] === '"') { current += '""'; i++; continue; }
+      inQuotes = !inQuotes;
+      current += char;
+    } else if (char === "\n" && !inQuotes) {
+      records.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  records.push(current);
+  return records.filter((r) => r.trim().length > 0);
+}
+
 function csvToItems(csvText) {
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return [];
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim());
-  return lines.slice(1).map((line) => {
-    const cells = parseCsvLine(line);
+  const records = splitCsvRecords(csvText);
+  if (records.length === 0) return [];
+  const headers = parseCsvLine(records[0]).map((h) => h.trim());
+  return records.slice(1).map((record) => {
+    const cells = parseCsvLine(record);
     const obj = {};
     headers.forEach((h, i) => { obj[h] = cells[i] !== undefined ? cells[i].trim() : ""; });
     return {

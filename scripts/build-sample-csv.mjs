@@ -9,6 +9,9 @@
 // src/App.jsx. If that header list changes, change it here too — a sample CSV whose
 // columns don't match the importer is worse than no sample at all.
 //
+// The generated file is round-tripped back through the real csvToItems as part of the
+// CSV test, so a drift between the two shows up as a failing field comparison.
+//
 // Note what the CSV format cannot carry: title, heading, summary, columns and teams are
 // all item-level-only omissions. csvToItems returns items and nothing else, and the
 // importer invents teams from the teamId strings. That asymmetry is the point of
@@ -23,18 +26,16 @@ const out = join(here, "..", "public", "sample-roadmap.csv");
 
 const CSV_ITEM_HEADERS = ["id", "columnId", "teamId", "tag", "text", "flag", "description", "links", "jiraUrl", "confluenceUrl", "strategicCategory", "revenueType", "revenueUplift", "revenueStream", "enablerNote", "enables", "savingAmount", "savingKind", "savingArea", "cadence", "startDate", "endDate", "milestones", "outcomeMax", "metricName", "metricDir", "metricValue", "metricUnit", "strategicNote"];
 
-// Newlines are flattened to spaces before escaping. This is NOT cosmetic: csvToItems
-// does `csvText.split(/\r?\n/)` BEFORE it parses quotes, so a newline inside a quoted
-// field splits the row in two. The tail of the record then lands in a phantom row and
-// every field after `description` reads back as null. Verified — with paragraph breaks
-// left in, these 36 items parse as 44 rows and lose their dates, links and milestones.
+// Identical to itemsToCsv's escaping in src/App.jsx — quote anything containing a comma,
+// a quote or a newline, and double up embedded quotes.
 //
-// So the sample CSV must be single-line-per-record to be importable at all. (The same
-// limitation applies to the app's own CSV export: an item with a multi-line description
-// exports fine and re-imports broken. That's a bug in the importer, not here.)
+// Multi-line descriptions are preserved as-is. Until 4.34.0 they had to be flattened to
+// spaces here, because csvToItems split records on newlines before parsing quotes and a
+// quoted newline tore the record in half. splitCsvRecords fixed that, so the sample CSV
+// now carries the same paragraph breaks as the sample JSON.
 const escape = (val) => {
-  const s = val === null || val === undefined ? "" : String(val).replace(/\s*\n+\s*/g, " ").trim();
-  if (s.includes(",") || s.includes('"')) return `"${s.replace(/"/g, '""')}"`;
+  const s = val === null || val === undefined ? "" : String(val);
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
   return s;
 };
 

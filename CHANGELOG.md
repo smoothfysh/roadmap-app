@@ -7,6 +7,28 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.34.0 — 2026-08-13
+
+- **Fixed: importing a CSV no longer destroys items with multi-paragraph descriptions.**
+  `csvToItems` split records with `csvText.split(/\r?\n/)` *before* `parseCsvLine` ever saw the
+  text, so a newline inside a quoted field cut the record in half. The tail became a phantom row,
+  and every field after the one holding the newline — in practice everything after `description`:
+  dates, links, milestones, revenue, metrics — read back as `null`.
+- **This affected the app's own exports.** `itemsToCsv` quotes multi-line descriptions correctly on
+  the way out, so **Export CSV** produced files that **Import CSV** silently mangled. Measured on
+  the sample fixture: 36 items came back as 44 rows.
+- The fix is a new `splitCsvRecords` that walks the text tracking quote depth and breaks a record
+  only on a newline outside quotes. `parseCsvLine` is unchanged — a newline inside quotes was
+  always just another character to it, so whole records parse exactly as before. CRLF is normalised
+  to `\n`, including inside quoted fields.
+- Covered by a round-trip test over the real functions: an item with paragraph breaks, embedded
+  commas and escaped quotes survives `itemsToCsv` → `csvToItems` field for field, alongside
+  regression checks for CRLF, blank lines, escaped `""`, empty input, header-only input, trailing
+  newlines and an unterminated quote.
+- **The sample CSV now carries its full descriptions.** `scripts/build-sample-csv.mjs` was
+  flattening newlines to spaces purely to dodge this bug; that workaround is gone, so
+  `public/sample-roadmap.csv` is once again a faithful rendering of `public/sample-roadmap.json`.
+
 ## 4.33.0 — 2026-08-13
 
 - **New: downloadable sample roadmap, as JSON and as CSV.** Two entries in the burger menu —
