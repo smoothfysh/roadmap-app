@@ -1056,7 +1056,7 @@ export default function RoadmapTracker() {
   const [newItemText, setNewItemText] = useState("");
   const [expandedItem, setExpandedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, text }
-  const [flagPickerOpen, setFlagPickerOpen] = useState(null); // item id
+  const [msCardOpen, setMsCardOpen] = useState(null); // item id — card milestone popover
   const [activeView, setActiveView] = useState("roadmap"); // "roadmap" | "strategic" | "revenue" | "impact" | "gantt"
   // "BY TIME" layout toggle. Compact ON (default) = each column flows independently (original layout).
   // Compact OFF = team rows align to the same level across all columns. Persisted across visits.
@@ -1447,6 +1447,14 @@ export default function RoadmapTracker() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [expandedItem]);
+
+  // Escape closes the card's milestone popover, matching the Gantt's milestone popover.
+  useEffect(() => {
+    if (!msCardOpen) return;
+    const handler = (e) => { if (e.key === "Escape") setMsCardOpen(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [msCardOpen]);
 
   useEffect(() => {
     if (!summaryModalOpen) return;
@@ -2308,17 +2316,14 @@ export default function RoadmapTracker() {
                       {item.tag}
                     </span>
                   )}
-                  <span className="flex-1 leading-snug flex flex-wrap items-center gap-1 min-w-0">
-                    <span className="truncate">{cleanText}</span>
-                    {pill && (
-                      <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">
-                        {pill}
-                      </span>
-                    )}
-                  </span>
-                  {/* Notes indicator */}
-                  {item.description && !isExpanded && (
-                    <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-stone-400" title="Has notes" />
+                  {/* Title eats the slack, so everything after it is pushed to the right edge —
+                      the date pill included. It used to sit inside the title span, trailing the
+                      text, which put it at a different x on every card. */}
+                  <span className="flex-1 min-w-0 leading-snug truncate">{cleanText}</span>
+                  {pill && (
+                    <span className="inline-flex items-center font-mono font-semibold text-[9px] tracking-wider bg-white border border-stone-400 text-stone-700 px-1.5 py-0.5 rounded-sm flex-shrink-0">
+                      {pill}
+                    </span>
                   )}
                   {/* Links — a plain "has links" marker, deliberately identical for every item:
                       no count, no provider glyph. The per-provider badges live in the modal. */}
@@ -2334,38 +2339,65 @@ export default function RoadmapTracker() {
                       </span>
                     );
                   })()}
-                  <div className="relative flex-shrink-0">
-                    <button
-                      onClick={!isPreview ? (e) => { e.stopPropagation(); setFlagPickerOpen(flagPickerOpen === item.id ? null : item.id); } : (e) => e.stopPropagation()}
-                      className={`flex-shrink-0 transition-opacity ${!isPreview ? "opacity-60 hover:opacity-100" : "opacity-40 cursor-default"}`}
-                      title={!isPreview ? "Set status" : undefined}
-                    >
-                      <Circle className={`w-3 h-3 ${
-                        item.flag === "risk"      ? "fill-rose-500 text-rose-500" :
-                        item.flag === "warning"   ? "fill-amber-400 text-amber-400" :
-                        item.flag === "completed" ? "fill-emerald-500 text-emerald-500" :
-                        item.flag === "done"      ? "fill-gray-400 text-gray-400" :
-                        "text-stone-300"
-                      }`} />
-                    </button>
-                    {flagPickerOpen === item.id && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setFlagPickerOpen(null); }} />
-                        <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-stone-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]" onClick={(e) => e.stopPropagation()}>
-                          {STATUS_OPTIONS.map((opt) => (
-                            <button
-                              key={String(opt.flag)}
-                              onClick={(e) => { e.stopPropagation(); setFlag(item.id, opt.flag); setFlagPickerOpen(null); }}
-                              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono hover:bg-stone-50 transition-colors ${item.flag === opt.flag ? "bg-stone-50 font-bold" : ""}`}
+                  {/* Milestones — a diamond in the slot the status dot used to hold (status now
+                      lives only in the item modal's footer picker; the card's own background tint
+                      already encodes it). Solid once every milestone has passed, hollow while any
+                      is still ahead — the same reading as the diamonds on the Gantt bars. Clicking
+                      lists them in a read-only popover, positioned like the old status picker. */}
+                  {(() => {
+                    const ms = sortMilestones((item.milestones || []).filter((m) => m && m.date));
+                    if (ms.length === 0) return null;
+                    const next = ms.find((m) => m.date > todayIso);
+                    const isOpen = msCardOpen === item.id;
+                    return (
+                      <div className="relative flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setMsCardOpen(isOpen ? null : item.id); }}
+                          title={`${ms.length === 1 ? "1 milestone" : `${ms.length} milestones`}${next ? ` · next ${formatMilestoneDate(next.date)}` : " · all passed"}`}
+                          aria-label={`${ms.length} milestone${ms.length === 1 ? "" : "s"} — show dates`}
+                          className="group/ms w-4 h-4 flex items-center justify-center"
+                        >
+                          <span
+                            style={{ transform: "rotate(45deg)" }}
+                            className={`w-[9px] h-[9px] border-[1.5px] transition-colors ${
+                              next
+                                ? "bg-white border-stone-600 group-hover/ms:border-stone-900"
+                                : "bg-stone-600 border-stone-600 group-hover/ms:bg-stone-900 group-hover/ms:border-stone-900"
+                            } ${isOpen ? "ring-1 ring-stone-400 ring-offset-1" : ""}`}
+                          />
+                        </button>
+                        {isOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMsCardOpen(null); }} />
+                            <div
+                              className="absolute bottom-full right-0 mb-1.5 bg-white border border-stone-300 rounded-lg shadow-xl z-50 py-1.5 min-w-[190px] max-w-[260px]"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <Circle className={`w-2.5 h-2.5 flex-shrink-0 ${opt.dot}`} />
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                              <div className="px-3 pb-1 text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400">
+                                {ms.length === 1 ? "1 milestone" : `${ms.length} milestones`}
+                              </div>
+                              {ms.map((m) => (
+                                <div key={m.id} className="flex items-start gap-2 px-3 py-1">
+                                  <span
+                                    style={{ transform: "rotate(45deg)" }}
+                                    className={`w-1.5 h-1.5 mt-1.5 flex-shrink-0 border-[1.5px] border-stone-600 ${m.date > todayIso ? "bg-white" : "bg-stone-600"}`}
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-stone-400">
+                                      {formatMilestoneDate(m.date)}
+                                    </div>
+                                    <div className="text-[11px] text-stone-800 leading-snug break-words">
+                                      {m.label || <span className="italic text-stone-400">Untitled milestone</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {!isPreview && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: item.id, text: item.text }); }}
@@ -3097,10 +3129,10 @@ export default function RoadmapTracker() {
             </>
           ) : (
             <>
-              <span><span className="font-bold">Click</span> any item to expand · edit title, notes, JIRA &amp; Confluence links</span>
+              <span><span className="font-bold">Click</span> any item to expand · edit title, notes, status, links</span>
               <span><span className="font-bold">Drag</span> any item to reorder or move between columns</span>
               <span><span className="font-bold">Click</span> a team name to collapse / expand it</span>
-              <span><span className="font-bold">Click</span> a quarter label to rename · status dot to cycle through and set status</span>
+              <span><span className="font-bold">Click</span> a quarter label to rename · a <span className="font-bold">◆</span> on a card to list its milestones</span>
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
           )}

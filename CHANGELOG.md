@@ -7,6 +7,22 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.36.0 — 2026-08-14
+
+- **Cards show a milestone indicator: a ◆ in the slot the status dot used to hold.** Hollow while
+  any milestone is still ahead, solid once every one has passed — the same reading as the diamonds
+  on the Gantt bars. Clicking it opens a read-only popover listing every milestone's date and
+  label, positioned like the old status picker; dismisses on outside click or `Esc`.
+- **Removed the card's status dot and the notes dot to pay for it.** A fourth badge would have
+  taken the collapsed header's fixed furniture from 70px to 92px, all of it off the title. The
+  status dot was a redundant *display* — the card's background tint already encodes the flag — so
+  only its click target was lost; status is still set from the item modal's footer picker. Net
+  effect is a slightly wider title than before, not narrower.
+- **The date pill is right-aligned instead of trailing the title.** It was nested inside the title
+  span, so it landed at a different x on every card; it's now a sibling of the marker cluster with
+  the title taking the slack, so pills sit against the right edge and read as a column.
+- Footer help updated: the status-dot hint is gone, replaced by the ◆ hint.
+
 ## 4.35.0 — 2026-08-13
 
 - **The sample roadmap now looks like a real roadmap: 36 items → 102.** One or two items per lane
