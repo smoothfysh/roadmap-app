@@ -7,6 +7,22 @@ app footer (e.g. `v4.5.0`). Update this file whenever the version is bumped.
 
 ---
 
+## 4.37.0 — 2026-08-21
+
+- **Title tags are no longer country-only — any short prefix before a colon becomes a badge.**
+  `V1:`, `V2:`, `P1:`, `MVP:`, `PHASE 2:`, `DE/V1:` all tag now, alongside the existing `FR:` /
+  `DE/AT:`. The old rule was 2–3 uppercase letters, so anything with a digit was rejected.
+  Prefixes are upper-cased (`v1:` → `V1`), and may contain letters and digits with spaces or `/`
+  as separators. Colours are unchanged: listed tags keep their `TAG_STYLES` colour, slash combos
+  the grey, everything new the white outline pill.
+- **Two guards on the wider rule.** A prefix over `TAG_MAX_LEN` (12 chars) stays plain title text,
+  since badges are fixed-width furniture on the card header and a long one wrecks the layout; and
+  a `//` after the colon is read as a URL, so pasting `https://…` as a title doesn't yield an
+  `[HTTPS]` badge. Accepted consequences of the generic rule: `Note: …` tags as `[NOTE]`, and
+  `09:00 standup` as `[09]`.
+- **Swimlane wording: "team" → "section".** The team modal's header label now reads *Section name*,
+  and the three footer hints say "Click a section name…" (board, Gantt, and shared read-only view).
+
 ## 4.36.0 — 2026-08-14
 
 - **Cards show a milestone indicator: a ◆ in the slot the status dot used to hold.** Hollow while

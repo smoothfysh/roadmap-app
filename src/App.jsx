@@ -781,7 +781,9 @@ const flagStyles = {
   null: "",
 };
 
-// ---------- Tag colour tokens — edit these to adjust country badge colours ----------
+// ---------- Tag colour tokens — edit these to adjust tag badge colours ----------
+// Tags are not just country codes (see extractTag): "V1", "PHASE 2" etc. tag too.
+// Add a row here to give any tag its own colour; unlisted ones fall back below.
 const TAG_STYLES = {
   "FR":    "bg-red-600 text-white",
   "DE":    "bg-yellow-400 text-black",
@@ -789,8 +791,8 @@ const TAG_STYLES = {
   "FR/DE": "bg-slate-800 text-white",
   "DE/FR": "bg-slate-800 text-white",
 };
-const TAG_COMBO_STYLE   = "bg-slate-700 text-white";                         // any unlisted multi-country combo (e.g. FR/AT)
-const TAG_UNKNOWN_STYLE = "bg-white border border-stone-400 text-stone-700"; // single unrecognised country — styled like a date pill
+const TAG_COMBO_STYLE   = "bg-slate-700 text-white";                         // any unlisted slash combo (e.g. FR/AT, DE/V1)
+const TAG_UNKNOWN_STYLE = "bg-white border border-stone-400 text-stone-700"; // any other unlisted tag (V1, MVP, NL) — styled like a date pill
 // ------------------------------------------------------------------------------------
 
 function getTagStyle(tag) {
@@ -882,12 +884,35 @@ function LinkBadge({ url, size = "w-4 h-4" }) {
 }
 
 // ---------- Tag extraction from item title ----------
-// Recognises prefixes like "FR: title", "DE: title", "FR/DE: title"
-// Country codes must be 2–3 uppercase letters; combinations separated by /
+// Any short prefix before a colon becomes the tag: "FR: title", "DE/AT: title",
+// "V1: title", "PHASE 2: title". Not country-specific — the user asked for
+// version-style tags too, so the rule is deliberately generic.
+//
+// The prefix is upper-cased ("v1: x" tags as V1), and may contain letters and
+// digits with spaces or "/" as separators. Two guards keep it from swallowing
+// ordinary titles:
+//   · TAG_MAX_LEN — badges are fixed-width furniture on the card header, so a
+//     long prefix ("Migrate checkout to Stripe: phase 2") stays plain text.
+//   · a "//" after the colon is a URL, not a tag — never badge "https:".
+// Note the flip side of the generic rule, which the user accepted knowingly:
+// "Note: revisit in Q3" does tag, as [NOTE]. Digit-only prefixes tag too, so
+// "09:00 standup" becomes [09] — also accepted.
+const TAG_MAX_LEN = 12;
+
 function extractTag(text) {
-  const match = text.match(/^([A-Z]{2,3}(?:\/[A-Z]{2,3})*)\s*:\s*(.+)$/);
-  if (match) return { tag: match[1], text: match[2].trim() };
-  return { tag: null, text };
+  const colon = text.indexOf(":");
+  if (colon < 1) return { tag: null, text };
+  const rest = text.slice(colon + 1).trim();
+  if (!rest || rest.startsWith("//")) return { tag: null, text };
+  const tag = text
+    .slice(0, colon)
+    .trim()
+    .replace(/\s*\/\s*/g, "/") // "DE / FR" → "DE/FR", so TAG_STYLES still matches
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+  if (tag.length > TAG_MAX_LEN) return { tag: null, text };
+  if (!/^[A-Z0-9]+(?:[ /][A-Z0-9]+)*$/.test(tag)) return { tag: null, text };
+  return { tag, text: rest };
 }
 
 // ---------- Team detail (markdown-lite) ----------
@@ -2434,7 +2459,7 @@ export default function RoadmapTracker() {
                       if (e.key === "Escape") { setAddingTo(null); setNewItemText(""); }
                     }}
                     autoFocus
-                    placeholder="FR: feature name, or just a title…"
+                    placeholder="V1: feature name, or just a title…"
                     className="flex-1 text-xs border border-stone-300 rounded px-1.5 py-0.5"
                   />
                 </div>
@@ -3125,13 +3150,13 @@ export default function RoadmapTracker() {
           {isPreview ? (
             <>
               <span>This is a read-only shared view — use <span className="font-bold">Save &amp; open</span> in the banner above to make your own editable copy</span>
-              <span><span className="font-bold">Click</span> a team name to collapse it</span>
+              <span><span className="font-bold">Click</span> a section name to collapse it</span>
             </>
           ) : (
             <>
               <span><span className="font-bold">Click</span> any item to expand · edit title, notes, status, links</span>
               <span><span className="font-bold">Drag</span> any item to reorder or move between columns</span>
-              <span><span className="font-bold">Click</span> a team name to collapse / expand it</span>
+              <span><span className="font-bold">Click</span> a section name to collapse / expand it</span>
               <span><span className="font-bold">Click</span> a quarter label to rename · a <span className="font-bold">◆</span> on a card to list its milestones</span>
               <span><span className="font-bold">Author</span> Cadence-X</span>
             </>
@@ -3330,7 +3355,7 @@ export default function RoadmapTracker() {
             {/* Strategic footer */}
             <div className="mt-6 text-xs text-stone-500 font-mono flex flex-wrap items-center gap-x-6 gap-y-1">
               {!isPreview && <span><span className="font-bold">Click</span> any item to open it and assign a strategic category</span>}
-              <span><span className="font-bold">Click</span> a team name on the left to collapse / expand its swim lane</span>
+              <span><span className="font-bold">Click</span> a section name on the left to collapse / expand its swim lane</span>
               <span className="ml-auto opacity-40">{APP_VERSION}</span>
             </div>
           </div>
@@ -4299,7 +4324,7 @@ export default function RoadmapTracker() {
                 </div>
               )}
 
-              {/* Modal header — team name (editable) */}
+              {/* Modal header — section name (editable) */}
               <div className="px-5 py-4 bg-emerald-50 border-b border-emerald-100 relative">
                 <button
                   onClick={closeTeamModal}
@@ -4309,7 +4334,7 @@ export default function RoadmapTracker() {
                   <X className="w-4 h-4" />
                 </button>
                 <label className="block text-[9px] font-mono font-semibold uppercase tracking-wider text-emerald-700/70 mb-1">
-                  Team name
+                  Section name
                 </label>
                 {isPreview ? (
                   <div className="text-base font-bold text-stone-900 pr-8">{team.name}</div>
@@ -4455,7 +4480,7 @@ export default function RoadmapTracker() {
               <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
                 <div>
                   <label className="text-[9px] font-mono uppercase tracking-wider text-stone-400 block mb-1">
-                    Title <span className="normal-case opacity-60">— prefix with country code to set tag, e.g. FR: name</span>
+                    Title <span className="normal-case opacity-60">— text before a colon becomes the tag, e.g. FR: name or V1: name</span>
                   </label>
                   <input
                     type="text"
